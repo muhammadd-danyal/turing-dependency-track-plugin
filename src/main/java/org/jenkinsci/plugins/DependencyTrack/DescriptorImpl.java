@@ -286,7 +286,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
     }
 
     private FormValidation checkTeamPermissions(final ApiClient apiClient, final String poweredBy, final boolean autoCreateProjects, final boolean synchronous, final boolean projectProperties) throws ApiClientException {
-        final Set<String> requiredPermissions = Set.of(BOM_UPLOAD.toString(), VIEW_PORTFOLIO.toString(), VULNERABILITY_ANALYSIS.toString());
+        final Set<String> requiredPermissions = Stream.of(BOM_UPLOAD, VIEW_PORTFOLIO, VULNERABILITY_ANALYSIS).map(Enum::toString).collect(Collectors.toSet());
         final Set<String> optionalPermissions = new HashSet<>();
 
         if (autoCreateProjects) {

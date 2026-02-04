@@ -33,7 +33,7 @@ class ApiClientExceptionClassifier extends BinaryExceptionClassifier {
 
     @Override
     public Boolean classify(Throwable classifiable) {
-        return super.classify(classifiable) && !(classifiable instanceof ApiClientException || classifiable.getCause() == null);
+        return super.classify(classifiable) && !(classifiable instanceof ApiClientException && classifiable.getCause() == null);
     }
 
 }

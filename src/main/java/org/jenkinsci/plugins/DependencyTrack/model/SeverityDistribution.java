@@ -38,6 +38,9 @@ public class SeverityDistribution implements Serializable {
     private int unassigned;
 
     public void add(Severity severity) {
+        if (severity == null) {
+            return;
+        }
         if (Severity.CRITICAL == severity) {
             critical++;
         } else if (Severity.HIGH == severity) {
@@ -48,7 +51,7 @@ public class SeverityDistribution implements Serializable {
             low++;
         } else if (Severity.INFO == severity) {
             info++;
-        } else if (Severity.UNASSIGNED == severity) {
+        } else {
             unassigned++;
         }
     }

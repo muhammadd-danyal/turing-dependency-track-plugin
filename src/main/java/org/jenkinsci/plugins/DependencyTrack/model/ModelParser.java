@@ -45,7 +45,7 @@ abstract class ModelParser {
         try {
             return value != null ? Enum.valueOf(enumType, value) : null;
         } catch (IllegalArgumentException ignore) {
-            return enumType.getEnumConstants()[0];
+            return null;
         }
     }
 }

@@ -35,7 +35,7 @@ public class FindingParser extends ModelParser {
                 .map(FindingParser::parseFinding)
                 .collect(ArrayList<Finding>::new, (findings, finding) -> {
 
-                    if (!findings.contains(finding) && findings.stream().anyMatch(finding::isAliasOf)) {
+                    if (!findings.contains(finding) && findings.stream().noneMatch(finding::hasAlias)) {
                         findings.add(finding);
                     }
                 }, List::addAll);
