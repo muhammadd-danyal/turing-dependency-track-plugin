@@ -44,7 +44,7 @@ class PluginUtil {
         }
         try {
             URL url = new URL(value);
-            if (!url.getProtocol().toLowerCase().startsWith("http")) {
+            if (!url.getProtocol().matches("https?")) {
                 return FormValidation.error(Messages.Publisher_ConnectionTest_InvalidProtocols());
             }
         } catch (MalformedURLException e) {

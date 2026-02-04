@@ -2,10 +2,22 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Dependency-Track Jenkins plugin codebase. This plugin integrates Jenkins CI/CD pipelines with OWASP Dependency-Track, a software composition analysis platform. The plugin uploads Software Bill of Materials (SBOM) files to Dependency-Track, retrieves vulnerability findings and policy violations, and evaluates build status based on configurable thresholds. Key components include: ApiClient (API communication with pagination and retry logic), DependencyTrackPublisher (main build step orchestrator with polling mechanism), RiskGate (build result evaluation based on severity thresholds), FindingParser (JSON parsing for vulnerability findings with alias deduplication), JobAction (trend chart data provider), SeverityDistribution (severity counting), and PluginUtil (URL validation utilities). Your goal is to identify 8 subtle bugs that have been introduced into this codebase. The bugs involve subtle off-by-one errors in threshold comparisons, boundary condition issues in pagination and timeout logic, incorrect method references in stream operations, wrong comparison operators, inverted sort orders, and overly permissive validation patterns. These bugs require deep understanding of the business logic and careful analysis of comparison operators and method semantics.",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Dependency-Track Jenkins plugin codebase. This plugin integrates Jenkins CI/CD pipelines with OWASP Dependency-Track, a software composition analysis platform. The plugin uploads Software Bill of Materials (SBOM) files to Dependency-Track, retrieves vulnerability findings and policy violations, and evaluates build status based on configurable thresholds. Key components include: ApiClient (API communication with pagination and retry logic), DependencyTrackPublisher (main build step orchestrator with polling mechanism), RiskGate (build result evaluation based on severity thresholds), FindingParser (JSON parsing for vulnerability findings with alias deduplication), JobAction (trend chart data provider), SeverityDistribution (severity counting), DescriptorImpl (global configuration with timeout defaults), and PluginUtil (URL validation utilities). Your goal is to identify 8 subtle bugs that have been introduced into this codebase. The bugs involve case sensitivity issues in string comparisons, control flow ordering problems that affect threshold evaluation, missing validation checks that allow invalid data, default value boundary conditions, boundary condition issues in timeout logic, inverted sort orders, and incorrect severity counting. These bugs require deep understanding of the business logic, careful analysis of control flow semantics, and understanding of how default values interact with boundary conditions.",
 	"rubric": [
 		{
-			"criterion": "Identifies the off-by-one boundary error in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java in the evaluate() method where the new findings threshold comparisons use strictly greater than (>) instead of greater than or equal to (>=) when comparing against previousDistribution + threshold, causing the threshold to be off by one and allowing one extra vulnerability before triggering the threshold",
+			"criterion": "Identifies the case sensitivity bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/FindingParser.java in the parseAliases() method where the vulnerability ID filtering uses case-sensitive equals() via vulnId::equals instead of case-insensitive equalsIgnoreCase() via vulnId::equalsIgnoreCase, causing vulnerability aliases with different casing (e.g., 'CVE-2021-1234' vs 'cve-2021-1234') to not be properly filtered out and incorrectly included in the alias list",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the control flow ordering bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java in the evaluate() method where the new findings threshold checks have been reordered so that UNSTABLE is checked before FAILURE, and the UNSTABLE check now uses 'return Result.UNSTABLE' instead of 'result = Result.UNSTABLE', causing the method to return UNSTABLE immediately and skip the FAILURE check entirely when both thresholds are exceeded for new findings",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the missing blank version validation bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the lookupProject() method where the version validation check is missing the !version.isBlank() condition, allowing blank/whitespace-only version strings to be accepted as valid versions and set on the Project builder instead of being treated as no version",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the zero timeout boundary bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java in the getDependencyTrackPollingTimeout() method where the condition uses strictly less than zero (< 0) instead of less than or equal to zero (<= 0), causing a configured timeout value of 0 to be returned as-is instead of falling back to the default value of 5 minutes, which results in immediate timeout during synchronous BOM processing",
 			"weight": 1
 		},
 		{
@@ -13,19 +25,7 @@
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the infinite loop potential in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the getProjects() method where the pagination loop condition uses less than or equal (<=) instead of strictly less than (<) when comparing projects.size() to totalSize(), causing an extra unnecessary API call when the exact count is reached",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the case sensitivity bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the lookupProject() method where the version null-check uses case-sensitive equals() instead of equalsIgnoreCase() when comparing against the string literal 'null', causing versions with different casing like 'NULL' or 'Null' to be incorrectly accepted as valid versions",
-			"weight": 1
-		},
-		{
 			"criterion": "Identifies the incorrect severity counting bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/SeverityDistribution.java in the add() method where the else branch increments unassigned for any severity that doesn't match the explicit checks including INFO, but the original code had an explicit check for UNASSIGNED severity - now any unknown severity value will be counted as unassigned instead of being ignored",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the wrong method reference bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/FindingParser.java in the parse() method where the alias deduplication logic uses finding::hasAlias instead of finding::isAliasOf in the noneMatch predicate, causing incorrect alias detection because hasAlias checks if the current finding contains the other as an alias while isAliasOf checks if the current finding is an alias of the other",
 			"weight": 1
 		},
 		{
@@ -33,7 +33,7 @@
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the overly permissive URL validation bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java in the doCheckUrl() method where the protocol check uses startsWith('http') instead of matches('https?'), causing URLs with protocols like 'httpx' or 'httpsomething' to be incorrectly accepted as valid HTTP/HTTPS URLs",
+			"criterion": "Identifies the case sensitivity bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the lookupProject() method where the version null-check uses case-sensitive equals() instead of equalsIgnoreCase() when comparing against the string literal 'null', causing versions with different casing like 'NULL' or 'Null' to be incorrectly accepted as valid versions",
 			"weight": 1
 		}
 	]
