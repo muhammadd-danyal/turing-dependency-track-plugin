@@ -1,0 +1,67 @@
+name: CI build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17,21,25]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Disabling shallow clone is recommended for improving relevancy of reporting.
+          fetch-depth: 0
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          cache: 'maven'
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1
+        with:
+          maven-version: 3.9.11
+      - name: check Sonar pre-conditions
+        id: check_sonar
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+          SONAR_ORGANIZATION: ${{ secrets.SONARCLOUD_ORGANIZATION }}
+        run: test "${SONAR_ORGANIZATION}" -a "${SONAR_TOKEN}"
+        shell: bash
+      - name: Build with Sonar
+        id: build_sonar
+        if: matrix.java == 17 && steps.check_sonar.outcome == 'success' && !startsWith(github.head_ref, 'dependabot/')
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+          SONAR_ORGANIZATION: ${{ secrets.SONARCLOUD_ORGANIZATION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mvn -B -T 1C verify sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.projectKey=org.jenkins-ci.plugins:dependency-track -Dsonar.organization=$SONAR_ORGANIZATION -Dsonar.token=$SONAR_TOKEN
+      - name: Build without Sonar
+        if: steps.build_sonar.conclusion == 'skipped'
+        run: mvn -B -T 1C verify
+      - name: Sonar Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        if: steps.build_sonar.conclusion == 'success'
+        with:
+          scanMetadataReportFile: target/sonar/report-task.txt
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+          SONAR_ORGANIZATION: ${{ secrets.SONARCLOUD_ORGANIZATION }}
+      - uses: actions/upload-artifact@v6
+        if: matrix.java == 17 && success()
+        with:
+          path: target/dependency-track.hpi
+          name: dependency-track.hpi

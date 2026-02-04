@@ -1,0 +1,77 @@
+name: perform release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'The new version to be set. Leave it empty if you want Maven to set the next version automatically.'
+        required: false
+        type: string
+
+permissions:
+  checks: read
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: 'zulu'
+          cache: 'maven'
+          server-id: 'maven.jenkins-ci.org'
+          server-username: 'MAVEN_USERNAME'
+          server-password: 'MAVEN_TOKEN'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@d6af6abeda15e98926a57b5aa970a96bb37f97d1
+        with:
+          maven-version: 3.9.11
+
+      - name: Configure Git User
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: perform release
+        run: mvn -B -DskipTests -Dspotbugs.skip=true -DreleaseVersion=${{ inputs.release_version }} -Darguments="-DskipTests -Dspotbugs.skip=true" release:prepare release:perform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+
+      - name: extract version
+        id: current_version
+        shell: bash
+        run: |
+          echo "version=$(mvn -q -f target/checkout/pom.xml -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
+
+      - name: Get Changelog Entry
+        id: changelog_reader
+        uses: mindsers/changelog-reader-action@32aa5b4c155d76c94e4ec883a223c947b2f02656
+        with:
+          validation_level: none
+          version: v${{ steps.current_version.outputs.version }}
+          path: ./target/checkout/CHANGELOG.md
+
+      - name: Create Release
+        uses: ncipollo/release-action@b7eabc95ff50cbeeedec83973935c8f306dfcd0b
+        with:
+          artifacts: target/checkout/target/dependency-track.hpi
+          artifactContentType: application/zip
+          draft: false
+          tag: v${{ steps.current_version.outputs.version }}
+          body: ${{ steps.changelog_reader.outputs.changes }}
+          token: ${{ secrets.GITHUB_TOKEN }}

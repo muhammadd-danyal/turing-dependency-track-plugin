@@ -1,0 +1,7 @@
+<?jelly escape-by-default='true'?>
+<div>
+    <p>
+        This plug-in publishes Software Bill-of-Materials (SBOM) to Dependency-Track for continuous analysis.
+        <a href="https://dependencytrack.org/">Dependency-Track</a> is an intelligent Software Supply Chain Component Analysis platform that allows organizations to identify and reduce risk from the use of third-party and open source components.
+    </p>
+</div>
