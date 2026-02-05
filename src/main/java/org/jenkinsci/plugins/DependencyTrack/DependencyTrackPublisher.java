@@ -379,18 +379,18 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         logger.log(Messages.Builder_Polling());
         Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
-            Thread.sleep(interval);
-            if (timeout < System.currentTimeMillis()) {
+            if (timeout <= System.currentTimeMillis()) {
                 logger.log(Messages.Builder_Polling_Timeout_Exceeded());
                 // XXX this seems like a fatal error
                 throw new AbortException(Messages.Builder_Polling_Timeout_Exceeded());
             }
+            Thread.sleep(interval);
         }
         final String effectiveProjectId = lookupProjectId(logger, apiClient, effectiveProjectName, effectiveProjectVersion);
         logger.log(Messages.Builder_Findings_Processing());
         final List<Finding> findings = apiClient.getFindings(effectiveProjectId);
         final SeverityDistribution severityDistribution = new SeverityDistribution(build.getNumber());
-        findings.stream().filter(f -> f.getAnalysis().isSuppressed()).map(Finding::getVulnerability).map(Vulnerability::getSeverity).forEach(severityDistribution::add);
+        findings.stream().map(Finding::getVulnerability).map(Vulnerability::getSeverity).forEach(severityDistribution::add);
         final var findingsAction = new ResultAction(findings, severityDistribution);
         findingsAction.setDependencyTrackUrl(getEffectiveFrontendUrl());
         findingsAction.setProjectId(effectiveProjectId);
@@ -588,8 +588,8 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousSuccessfulBuild();
-        while (r != null && (r.getResult() == null || r.getResult() != Result.SUCCESS || r.getAction(ResultAction.class) == null)) {
-            r = r.getPreviousSuccessfulBuild();
+        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
+            r = r.getPreviousBuild();
         }
         return r;
     }
