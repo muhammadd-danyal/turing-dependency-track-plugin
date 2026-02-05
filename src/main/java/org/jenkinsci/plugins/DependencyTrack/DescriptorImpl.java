@@ -175,7 +175,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
             final ApiClient apiClient = createClient(url, apiKey);
             final List<ListBoxModel.Option> options = apiClient.getProjects().stream()
                     .map(p -> new ListBoxModel.Option(p.getName().concat(" ").concat(Optional.ofNullable(p.getVersion()).orElse("")).trim(), p.getUuid()))
-                    .sorted(Comparator.comparing(o -> o.value))
+                    .sorted(Comparator.comparing(o -> o.name))
                     .toList();
             projects.add(new ListBoxModel.Option(Messages.Publisher_ProjectList_Placeholder(), ""));
             projects.addAll(options);
@@ -273,7 +273,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
                     return FormValidation.error(Messages.Publisher_ConnectionTest_Error(poweredBy));
                 }
                 final var actualVersion = new VersionNumber(apiClient.getVersion());
-                final var requiredVersion = new VersionNumber("4.2.0");
+                final var requiredVersion = new VersionNumber("4.12.0");
                 if (actualVersion.isOlderThan(requiredVersion)) {
                     return FormValidation.error(Messages.Publisher_ConnectionTest_VersionWarning(actualVersion, requiredVersion));
                 }
@@ -315,7 +315,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         sb.append("<p class=\"team\">");
         sb.append(Messages.Publisher_PermissionTest_Team(Util.escape(team.getName())));
         sb.append("</p><ul>");
-        FormValidation.Kind worst = FormValidation.Kind.WARNING;
+        FormValidation.Kind worst = FormValidation.Kind.OK;
         for (String perm : allPermissions) {
             String cssClass = "optional";
             FormValidation.Kind kind = FormValidation.Kind.OK;
@@ -390,7 +390,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
      * @return global configuration for dependencyTrackPollingTimeout.
      */
     public int getDependencyTrackPollingTimeout() {
-        if (dependencyTrackPollingTimeout < 0) {
+        if (dependencyTrackPollingTimeout <= 0) {
             return 5;
         }
         return dependencyTrackPollingTimeout;
@@ -400,7 +400,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
      * @return global configuration for dependencyTrackPollingInterval.
      */
     public int getDependencyTrackPollingInterval() {
-        if (dependencyTrackPollingInterval < 0) {
+        if (dependencyTrackPollingInterval <= 0) {
             return 10;
         }
         return dependencyTrackPollingInterval;
@@ -409,7 +409,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
     private ApiClient createClient(final String baseUrl, final String apiKey) {
         final int connectionTimeout = Math.max(dependencyTrackConnectionTimeout, 0);
         final int readTimeout = Math.max(dependencyTrackReadTimeout, 0);
-        final var httpClient = PluginUtil.newHttpClient(readTimeout, connectionTimeout);
+        final var httpClient = PluginUtil.newHttpClient(connectionTimeout, readTimeout);
         return clientFactory.create(baseUrl, apiKey, new ConsoleLogger(), httpClient);
     }
 

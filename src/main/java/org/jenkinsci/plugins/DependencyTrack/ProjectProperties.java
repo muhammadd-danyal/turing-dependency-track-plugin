@@ -174,8 +174,8 @@ public final class ProjectProperties extends AbstractDescribableImpl<ProjectProp
         return (values != null ? values.stream() : Stream.<String>empty())
                 .map(String::trim)
                 .filter(Predicate.not(String::isEmpty))
-                .distinct()
                 .map(String::toLowerCase)
+                .distinct()
                 .sorted()
                 // list must not be immutable:
                 // java.lang.UnsupportedOperationException: Refusing to marshal java.util.ImmutableCollections$ListN for security reasons

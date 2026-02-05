@@ -90,7 +90,7 @@ public class ResultAction implements RunAction2, SimpleBuildStep.LastBuildAction
     @Nonnull
     public String getVersionHash() {
         return DigestUtils.sha256Hex(
-                Optional.ofNullable(Jenkins.get().getPlugin("dependency-Track"))
+                Optional.ofNullable(Jenkins.get().getPlugin("dependency-track"))
                         .map(Plugin::getWrapper)
                         .map(PluginWrapper::getVersion)
                         .orElse("")

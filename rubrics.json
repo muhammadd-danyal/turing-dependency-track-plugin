@@ -2,126 +2,38 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer. Your task is to analyze the Dependency-Track Jenkins Plugin codebase — a Java-based Jenkins CI/CD plugin that uploads CycloneDX SBOMs to Dependency-Track, polls for analysis results, evaluates severity thresholds and policy violations to gate builds, and renders trend charts in the Jenkins UI. The plugin manages per-job and global configuration with Java serialization lifecycle methods. The goal is to identify 30 planted bugs spanning boundary condition errors, semantically-similar API method confusion, argument transposition, null-safety regressions, platform-dependent behavior, stream operation reordering, encoding mismatches, version check relaxation, URL path errors, comparator field confusion, accumulator initial value errors, off-by-one errors, and cross-module configuration boundary shifts. Many bugs look like plausible improvements or consistency fixes. Focus on the core plugin files in src/main/java/org/jenkinsci/plugins/DependencyTrack/.",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze the Dependency-Track Jenkins Plugin codebase — a Java-based Jenkins CI/CD plugin that uploads CycloneDX SBOMs to Dependency-Track, polls for analysis results in synchronous mode, evaluates severity thresholds and policy violations to gate builds, validates server permissions, and renders trend charts. The plugin manages per-job and global configuration with Java serialization lifecycle and resolves effective settings by checking job-level overrides before falling through to global defaults. The goal is to find 8 planted bugs involving boundary condition filter errors that change zero-value semantics, Jenkins API method name confusion that alters build history traversal, case-mismatch in stream collector keys causing silent data loss in trend charts, null-safety regression from an equals() receiver swap, and field-vs-local variable confusion in link action construction. Focus on src/main/java/org/jenkinsci/plugins/DependencyTrack/.",
 	"rubric": [
 		{
-			"criterion": "Identifies the off-by-one timing race in publishAnalysisResult() in DependencyTrackPublisher.java where the polling timeout comparison uses <= instead of < against System.currentTimeMillis(), causing a 1ms window where a valid analysis result arriving at the exact timeout boundary is rejected as a timeout failure",
+			"criterion": "Identifies the Jenkins API method confusion in getPreviousBuildWithAnalysisResult() in DependencyTrackPublisher.java (lines 586, 588) where getPreviousNotFailedBuild() is used instead of getPreviousSuccessfulBuild(), causing UNSTABLE builds to be included as comparison baselines for new-findings threshold evaluation, which makes the security gate more lenient after an UNSTABLE build because the higher finding counts from that UNSTABLE build reduce the computed delta of 'new' findings",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the semantic method confusion in evaluateRiskGates() in DependencyTrackPublisher.java where result.isWorseThan(Result.UNSTABLE) is used instead of result.isWorseOrEqualTo(Result.UNSTABLE), causing UNSTABLE threshold breaches to be silently swallowed since isWorseThan excludes the boundary value itself",
+			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingTimeout() in DependencyTrackPublisher.java (line 552) where filter(v -> v >= 0) is used instead of filter(v -> v > 0), allowing a job-level polling timeout value of exactly 0 to pass through instead of falling back to the global default, which yields 60000L * 0 = 0ms timeout causing immediate 'polling timeout exceeded' failure in synchronous builds when the timeout is explicitly set to zero",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the Jenkins API method confusion in getPreviousBuildWithAnalysisResult() in DependencyTrackPublisher.java where getPreviousNotFailedBuild() is used instead of getPreviousSuccessfulBuild(), causing UNSTABLE builds to be included as comparison baselines for new-findings thresholds, making the security gate more lenient after an UNSTABLE build",
+			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingInterval() in DependencyTrackPublisher.java (line 560) where filter(v -> v >= 0) is used instead of filter(v -> v > 0), allowing a job-level polling interval value of exactly 0 to pass through instead of falling back to the global default, which yields 1000L * 0 = 0ms sleep causing a tight busy-loop of rapid HTTP polling requests that can degrade Dependency-Track server performance",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingTimeout() in DependencyTrackPublisher.java where filter(v -> v >= 0) is used instead of filter(v -> v > 0), allowing a polling timeout value of 0 to produce 60000L * 0 = 0ms timeout causing immediate timeout failure in synchronous builds",
+			"criterion": "Identifies the boundary filter tightening in getEffectiveConnectionTimeout() in DependencyTrackPublisher.java (line 568) where filter(v -> v > 0) is used instead of filter(v -> v >= 0), rejecting a job-level connection timeout value of 0 — which in OkHttp means infinite/no timeout — and instead falling back to the global default, silently overriding the user's explicit intent to disable connection timeouts on slow networks",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingInterval() in DependencyTrackPublisher.java where filter(v -> v >= 0) is used instead of filter(v -> v > 0), allowing a polling interval value of 0 to produce 1000L * 0 = 0ms sleep causing a tight busy-loop that can DoS the Dependency-Track server",
+			"criterion": "Identifies the boundary filter tightening in getEffectiveReadTimeout() in DependencyTrackPublisher.java (line 576) where filter(v -> v > 0) is used instead of filter(v -> v >= 0), rejecting a job-level read timeout value of 0 — which in OkHttp means infinite/no timeout — and instead falling back to the global default, causing unexpected read timeouts on large projects or slow Dependency-Track instances where infinite read timeout was intentionally configured",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the boundary filter tightening in getEffectiveConnectionTimeout() in DependencyTrackPublisher.java where filter(v -> v > 0) is used instead of filter(v -> v >= 0), rejecting a connection timeout value of 0 (which means infinite/no timeout in OkHttp) and falling through to the global default instead of honoring the user's explicit intent",
+			"criterion": "Identifies the case mismatch in getViolationsTrend() in ViolationsJobAction.java (line 66) where .toLowerCase() is missing from the Collectors.toMap key expression violation.getState().name(), producing uppercase map keys ('FAIL', 'WARN', 'INFO') that do not match the lowercase keys used in the putIfAbsent calls on lines 71-73, causing the violation trend chart JSON to contain both uppercase entries (from actual violations) and lowercase zero-defaults (from putIfAbsent), with the UI reading only the lowercase keys and always showing zero violations",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the boundary filter tightening in getEffectiveReadTimeout() in DependencyTrackPublisher.java where filter(v -> v > 0) is used instead of filter(v -> v >= 0), rejecting a read timeout value of 0 (infinite in OkHttp) causing unexpected read timeouts on large projects",
+			"criterion": "Identifies the null-safety regression in lookupApiKey() in DescriptorImpl.java (line 419) where the equals() receiver was swapped from c.getId().equals(credentialId) to credentialId.equals(c.getId()), introducing a NullPointerException when credentialId is null — which occurs when getDependencyTrackApiKey() returns null (annotated @Nullable via Lombok) because no API key credential is configured either globally or per-job",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the cross-module boundary shift in getDependencyTrackPollingTimeout() in DescriptorImpl.java where the guard uses < 0 instead of <= 0, allowing a global polling timeout value of 0 to pass through instead of returning the default of 5, which combined with the publisher's 60000L multiplication yields 0ms global timeout",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the cross-module boundary shift in getDependencyTrackPollingInterval() in DescriptorImpl.java where the guard uses < 0 instead of <= 0, allowing a global polling interval value of 0 to pass through instead of returning the default of 10, causing a tight polling loop when no job-level override is set",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the null-safety regression disguised as an improvement in evaluateRiskGates() in DependencyTrackPublisher.java where .orElse(new SeverityDistribution(0)) is used instead of .orElse(null) for the previous build's severity distribution, causing new-findings thresholds to always be evaluated against a zero baseline on first builds instead of being correctly skipped",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the argument transposition in perform() in DependencyTrackPublisher.java where PluginUtil.newHttpClient() is called with getEffectiveReadTimeout() and getEffectiveConnectionTimeout() swapped, causing the HTTP connection timeout to use the read timeout value and vice versa, leading to slow failure detection when DT is unreachable and premature read timeouts on large responses",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the argument transposition in expandProjectProperties() in DependencyTrackPublisher.java where getParentVersion() and getParentName() are swapped in the ProjectData.Properties constructor call, causing the parent project name to receive the version value and vice versa, breaking parent project resolution when configured by name+version",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the argument transposition in createClient() in DescriptorImpl.java where PluginUtil.newHttpClient() is called with readTimeout and connectionTimeout swapped, causing incorrect timeout behavior for connection testing and project listing in the admin UI",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the case mismatch in getViolationsTrend() in ViolationsJobAction.java where .toLowerCase() is removed from the violation state collector key (violation.getState().name()), producing uppercase map keys (FAIL, WARN, INFO) that don't match the lowercase keys used in putIfAbsent calls, causing the violation trend chart to show zero for all violation types",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the platform-dependent behavior in log() in ConsoleLogger.java where System.lineSeparator() is used instead of the literal '\\n' in the message.replace() call, causing multi-line log messages to lose their [DependencyTrack] prefix on subsequent lines on Windows where System.lineSeparator() is '\\r\\n' but message newlines are '\\n'",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the stream operation reordering in normalizeTags() in ProjectProperties.java where .distinct() is called before .map(String::toLowerCase) instead of after, causing case-different duplicates like 'Security' and 'security' to survive deduplication and be sent as duplicate lowercase tags to Dependency-Track",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the string validation semantics narrowing in isBlank() in PluginUtil.java where value.isEmpty() is used instead of value.isBlank(), failing to treat whitespace-only strings as blank, allowing whitespace-only URLs, API keys, and project names to pass validation and cause downstream failures",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the off-by-one no-op in parseBaseUrl() in PluginUtil.java where trimmed.substring(0, trimmed.length()) is used instead of trimmed.substring(0, trimmed.length() - 1), making the trailing-slash removal a no-op that returns the full string including the slash, causing double-slash in composed API URLs",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the plugin ID case sensitivity issue in getVersionHash() in ResultAction.java where 'dependency-Track' (capital T) is used instead of 'dependency-track' (all lowercase), causing the plugin lookup to fail and the version hash to be a constant SHA256 of empty string, breaking cache-busting of static resources across plugin updates",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the plugin ID case sensitivity issue in getVersionHash() in ViolationsRunAction.java where 'dependency-Track' (capital T) is used instead of 'dependency-track' (all lowercase), causing the same constant version hash and stale resource caching for the violations page",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the URL path error in getUrlName() in ResultLinkAction.java where '/project/' (singular) is used instead of '/projects/' (plural) in the Dependency-Track frontend URL, causing project links in Jenkins to return 404 since the DT frontend uses the plural '/projects/' path convention",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the URL path error in perform() in DependencyTrackPublisher.java where '/project/' (singular) is used instead of '/projects/' (plural) in the success log message URL, causing users who copy the URL from the build log to get a 404 on the DT frontend",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the null-safety regression in lookupApiKey() in DescriptorImpl.java where credentialId.equals(c.getId()) is used instead of c.getId().equals(credentialId), causing a NullPointerException when credentialId is null (which occurs when no API key is configured globally or per-job, since getDependencyTrackApiKey() is annotated @Nullable)",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the method name confusion in publishAnalysisResult() in DependencyTrackPublisher.java where getEffectivePollingTimeout() is used instead of getEffectivePollingInterval() for computing the polling interval, causing the polling sleep to use the timeout value (typically 5 minutes) instead of the interval (typically 10 seconds), resulting in only 1-2 polls before timeout",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the version check relaxation in testConnection() in DescriptorImpl.java where the minimum required version is '4.2.0' instead of '4.12.0', allowing connections to outdated Dependency-Track versions (4.2.0 through 4.11.x) that may lack required API endpoints",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the character encoding mismatch in perform() in DependencyTrackPublisher.java where StandardCharsets.ISO_8859_1 is used instead of Charset.defaultCharset() (or UTF-8) for reading the BOM file, causing corruption of multi-byte UTF-8 characters in component names and descriptions",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the comparator field confusion in doFillProjectIdItems() in DescriptorImpl.java where the project dropdown is sorted by o.value (UUID) instead of o.name (display name), causing projects to appear in pseudo-random UUID order instead of alphabetical order",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the accumulator initial value error in checkTeamPermissions() in DescriptorImpl.java where FormValidation.Kind.WARNING is used as the initial value of worst instead of FormValidation.Kind.OK, causing connection test results to always show at least a warning even when all permissions are correctly configured",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the off-by-one in publishAnalysisResult() in DependencyTrackPublisher.java where new SeverityDistribution(build.getNumber() - 1) is used instead of new SeverityDistribution(build.getNumber()), causing the severity distribution to report findings under the wrong build number and shifting the trend chart data by one build",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the field-vs-local variable confusion in publishAnalysisResult() in DependencyTrackPublisher.java where the class field projectId is used instead of the local variable effectiveProjectId in the ResultLinkAction constructor, causing the project link to have a blank/null ID in name+version mode since projectId is unset when using name-based configuration",
+			"criterion": "Identifies the field-vs-local variable confusion in publishAnalysisResult() in DependencyTrackPublisher.java (line 409) where the class field projectId is used instead of the local variable effectiveProjectId when constructing the ResultLinkAction, causing the project link to have a null/blank project ID in name+version configuration mode (where projectId is unset) because the resolved UUID from lookupProjectId() stored in effectiveProjectId is not used",
 			"weight": 1
 		}
 	]

