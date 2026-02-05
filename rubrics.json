@@ -2,38 +2,38 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer analyzing the Dependency-Track Jenkins Plugin, which is a Jenkins plugin that publishes Software Bill-of-Materials (SBOM) to the Dependency-Track platform for security analysis. The plugin uploads CycloneDX BOMs, polls for analysis results, evaluates findings against configured thresholds, and determines build status (SUCCESS/UNSTABLE/FAILURE) based on vulnerability severity distributions. Your task is to identify 8 subtle bugs that have been deliberately introduced into this codebase. These bugs include: (1) race conditions and timing issues in polling mechanisms, (2) off-by-one errors in pagination and boundary conditions, (3) stale cache issues causing incorrect state across builds, (4) threshold comparison logic errors that affect build status determination, (5) character encoding problems that break internationalization, (6) incorrect previous build lookup logic that skips certain build states, (7) performance issues from unnecessary delays, and (8) result priority inversion bugs in multi-condition evaluation. Focus on correctness issues in core paths including API communication, threshold evaluation, build status determination, and data processing logic.",
+	"task_prompt": "You are an expert code reviewer analyzing the Dependency-Track Jenkins Plugin, which is a Jenkins plugin that publishes Software Bill-of-Materials (SBOM) to the Dependency-Track platform for security analysis. The plugin uploads CycloneDX BOMs, polls for analysis results, evaluates findings against configured thresholds, and determines build status (SUCCESS/UNSTABLE/FAILURE) based on vulnerability severity distributions. Your task is to identify 8 subtle bugs that have been deliberately introduced into this codebase. These bugs include: (1) race conditions and timing issues in polling mechanisms, (2) null pointer exception risks in URL parsing, (3) stale cache issues causing incorrect state across builds, (4) boundary validation errors in configuration parameter handling, (5) character encoding problems that break internationalization, (6) incorrect previous build lookup logic that skips certain build states, (7) performance/regex issues in string processing, and (8) timing logic errors from unnecessary delay removal. Focus on correctness issues in core paths including polling logic, configuration validation, URL handling, build status determination, logging, and state management across builds.",
 	"rubric": [
 		{
-			"criterion": "Identifies the race condition in publishAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the timeout check uses <= instead of < on line 383, causing false positive timeout failures when token processing completes exactly at the millisecond boundary of the configured timeout period",
+			"criterion": "Identifies the race condition in publishAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the timeout check uses <= instead of < on line 382, causing false positive timeout failures when token processing completes exactly at the millisecond boundary of the configured timeout period",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the off-by-one pagination error in getProjects method in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java where the loop termination condition uses <= instead of < on line 169, causing an extra unnecessary API call when the total project count is exactly divisible by the page size of 500",
+			"criterion": "Identifies the null pointer exception bug in parseBaseUrl method in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java where the null check was removed before calling endsWith() on line 59, causing NullPointerException when trimToNull() returns null for empty or whitespace-only URL strings",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the stale cache bug in perform method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the projectIdCache is not cleared (missing projectIdCache = null on line 303), causing the plugin to reuse project IDs from previous builds when project name or version changes between builds in auto-create mode",
+			"criterion": "Identifies the stale cache bug in perform method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the projectIdCache is not cleared (missing projectIdCache = null statement that should be on line 302), causing the plugin to reuse project IDs from previous builds when project name or version changes between builds in auto-create mode",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the threshold boundary fencepost error in evaluate method in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java where the failedCritical comparison uses > instead of >= on line 46, causing builds to pass when critical findings count exactly equals the configured failure threshold instead of failing as expected",
+			"criterion": "Identifies the boundary validation error in getDependencyTrackPollingInterval method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java where the check uses < 0 instead of <= 0 on line 403, allowing a polling interval of 0 seconds to be used instead of defaulting to 10 seconds, which can cause rapid polling loops or infinite loops in synchronous mode",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the character encoding bug in perform method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where BOM file reading uses Charset.forName(\"US-ASCII\") instead of Charset.defaultCharset() on line 327, causing garbled characters or parse failures for SBOM files containing non-ASCII characters such as international component names in UTF-8 encoding",
+			"criterion": "Identifies the character encoding bug in perform method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where BOM file reading uses Charset.forName(\"US-ASCII\") instead of Charset.defaultCharset() on line 326, causing garbled characters or parse failures for SBOM files containing non-ASCII characters such as international component names in UTF-8 encoding",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the previous build lookup logic error in getPreviousBuildWithAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the condition incorrectly skips UNSTABLE builds (r.getResult() == Result.UNSTABLE check added on line 595), causing new findings comparison to use outdated baseline from much earlier builds and producing incorrect delta calculations",
+			"criterion": "Identifies the previous build lookup logic error in getPreviousBuildWithAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the condition incorrectly skips UNSTABLE builds by adding r.getResult() == Result.UNSTABLE check on line 594, causing new findings comparison to use outdated baseline from much earlier builds and producing incorrect delta calculations",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the performance regression in publishAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the initial Thread.sleep(interval) call was removed before the while loop (originally on line 380), and the sleep moved inside the loop after the timeout check, causing immediate first check without any delay which may trigger unnecessary rapid polling or timing-dependent failures",
+			"criterion": "Identifies the regex performance bug in log method in src/main/java/org/jenkinsci/plugins/DependencyTrack/ConsoleLogger.java where String.replace() was changed to String.replaceAll() on line 43, causing unnecessary regex compilation overhead for every log message and potential regex injection issues if message contains regex special characters",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the result priority inversion bug in evaluate method in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java where the order of checking new findings thresholds is reversed - UNSTABLE thresholds are checked before FAILURE thresholds (lines 64-79), preventing FAILURE conditions from overriding UNSTABLE when both threshold types are violated simultaneously, causing incorrect build status determination",
+			"criterion": "Identifies the timing logic error in publishAnalysisResult method in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the initial Thread.sleep(interval) call before the while loop was removed (originally between lines 378-379), and the sleep moved inside the loop after the timeout check, causing immediate first API check without any initial delay which can trigger unnecessary rapid polling or rate limiting issues",
 			"weight": 1
 		}
 	]

