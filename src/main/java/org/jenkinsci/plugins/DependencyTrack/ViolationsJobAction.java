@@ -46,23 +46,14 @@ public class ViolationsJobAction extends InvisibleAction {
         return "dtrackTrend";
     }
 
-    /**
-     * Returns whether the policy violations trend chart is visible or not.
-     *
-     * @return {@code true} if the trend is visible, false otherwise
-     */
+
     public boolean isTrendVisible() {
         return project.getBuilds().stream()
                 .map(run -> run.getAction(ViolationsRunAction.class))
                 .anyMatch(Objects::nonNull);
     }
 
-    /**
-     * Returns the UI model for an ECharts line chart that shows the violations
-     * stacked by state.
-     *
-     * @return the UI model as JSON
-     */
+
     @JavaScriptMethod
     public JSONArray getViolationsTrend() {
         project.checkPermission(hudson.model.Item.READ);
@@ -72,7 +63,7 @@ public class ViolationsJobAction extends InvisibleAction {
                 .map(result -> {
                     final var violations = result.getViolations()
                             .stream()
-                            .collect(Collectors.toMap(violation -> violation.getState().name().toLowerCase(), i -> 1, (a, b) -> a));
+                            .collect(Collectors.toMap(violation -> violation.getState().name(), i -> 1, (a, b) -> a + b));
                     final var item = new JSONObject();
                     item.element("buildNumber", result.getRun().getNumber());
                     item.putAll(violations);

