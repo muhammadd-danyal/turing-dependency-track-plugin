@@ -2,30 +2,30 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Jenkins plugin for OWASP Dependency-Track integration. This plugin uploads Software Bill of Materials (SBOM/BOM) files to Dependency-Track servers, retrieves vulnerability findings and policy violations, evaluates risk gate thresholds to determine build pass/fail status, and displays security analysis results in Jenkins builds. The codebase includes API client communication with retry logic and pagination, model parsers for JSON responses, threshold evaluation for security gates, and build result actions for trend visualization. Your goal is to find subtle bugs including: control flow ordering issues in polling loops, boundary condition errors in pagination termination, inverted backoff policy configurations, URL parsing edge cases that fail to strip trailing characters, version comparison logic inversions, and build history traversal method inconsistencies that affect threshold comparisons.",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze a Jenkins plugin for OWASP Dependency-Track integration. This plugin uploads Software Bill of Materials (SBOM/BOM) files to Dependency-Track servers, retrieves vulnerability findings and policy violations, evaluates risk gate thresholds to determine build pass/fail status, and displays security analysis results in Jenkins builds. The codebase includes API client communication with retry logic and pagination, model parsers for JSON responses, threshold evaluation for security gates, and build result actions for trend visualization. Your goal is to find subtle bugs including: string validation method differences affecting whitespace handling, boundary condition filter changes allowing zero values, missing return statements in switch expressions, logical operator changes in loop termination conditions, and incorrect field references in sorting comparators.",
 	"rubric": [
 		{
+			"criterion": "Identifies the string validation bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java in the isBlank() method where value.isEmpty() is used instead of value.isBlank(), causing strings containing only whitespace characters (like spaces or tabs) to be considered non-blank and pass validation when they should be treated as blank, affecting URL and input validation throughout the plugin",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the polling interval filter bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the getEffectivePollingInterval() method where the filter condition uses v >= 0 instead of v > 0, allowing a polling interval of 0 to be accepted as valid which causes Thread.sleep(0) to be called in tight loops during BOM processing status polling, potentially causing CPU spinning and performance degradation",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the missing return statement bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the upload() method where the HTTP_OK case in the switch statement creates a new UploadResult but does not return it (missing 'return' keyword before 'new UploadResult'), causing successful uploads to fall through and always return UploadResult(false) indicating failure even when the upload succeeded",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the pagination loop termination bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the getProjects() method where the fetchMore condition uses logical OR (||) instead of AND (&&), causing the loop to continue fetching pages even when the result is empty as long as the size condition is met, potentially causing infinite loops or excessive API calls when the server returns empty pages",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the sorting comparator field bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java in the doFillProjectIdItems() method where the project options are sorted by Comparator.comparing(o -> o.value) instead of Comparator.comparing(o -> o.name), causing projects in the dropdown to be sorted by their UUID values instead of their display names, resulting in a seemingly random order that confuses users",
+			"weight": 1
+		},
+		{
 			"criterion": "Identifies the control flow reordering bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the publishAnalysisResult() method where the timeout check and Thread.sleep() calls have been reordered so that the timeout check using <= comparison happens before the sleep instead of after, and the comparison operator was changed from < to <=, causing the loop to potentially timeout prematurely at the exact boundary and changing the timing semantics of when timeout is evaluated relative to the API polling",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the pagination termination bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the getViolations() method where the fetchMore condition uses <= instead of < when comparing violations.size() to fetchedViolations.totalSize(), causing an extra unnecessary pagination request when the accumulated size exactly equals the total, potentially causing performance issues or unexpected behavior with server-side pagination",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the inverted backoff policy bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/api/ApiClient.java in the executeWithRetry() method where the UniformRandomBackOffPolicy has minBackOffPeriod set to 500 and maxBackOffPeriod set to 50, inverting the min/max relationship which causes undefined behavior in the random backoff calculation since the minimum is greater than the maximum",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the URL trailing slash stripping bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java in the parseBaseUrl() method where the substring operation uses trimmed.length() instead of trimmed.length() - 1, causing the trailing slash to NOT be removed when the URL ends with a slash, resulting in URLs like 'http://example.com/' instead of 'http://example.com' which causes double-slash issues when concatenating API paths",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the version comparison inversion bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java in the testConnection() method where actualVersion.isNewerThan(requiredVersion) is used instead of actualVersion.isOlderThan(requiredVersion), causing the version check to reject newer compatible versions while accepting older incompatible versions of the Dependency-Track server",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the build traversal method inconsistency bug in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java in the getPreviousBuildWithAnalysisResult() method where the loop body uses r.getPreviousBuild() instead of r.getPreviousSuccessfulBuild(), causing the method to traverse through all builds including failed ones instead of only successful builds, potentially returning a failed build without proper analysis results or causing incorrect threshold comparisons",
 			"weight": 1
 		},
 		{

