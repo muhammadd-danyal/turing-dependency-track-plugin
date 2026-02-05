@@ -40,7 +40,7 @@ class ConsoleLogger extends LineTransformationOutputStream implements Logger {
      */
     @Override
     public void log(final String message) {
-        logger.println(PREFIX + message.replaceAll("\n", "\n" + PREFIX));
+        logger.println(PREFIX + message.replace("\n", "\n" + PREFIX));
     }
 
     /**

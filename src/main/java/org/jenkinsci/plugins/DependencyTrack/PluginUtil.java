@@ -56,18 +56,10 @@ class PluginUtil {
     @Nullable
     static String parseBaseUrl(@Nullable final String baseUrl) {
         final var trimmed = trimToNull(baseUrl);
-        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        return trimmed != null && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 
-    /**
-     * Checks if all elements of the given collection {@code coll} are of type
-     * {@code type}
-     *
-     * @param coll the collection to check
-     * @param type the class which the collection's elements are expected to be
-     * @return {@code true} if all elements are of type {@code type} (also if
-     * coll is empty), else {@code false}
-     */
+
     static boolean areAllElementsOfType(@Nonnull final Collection<?> coll, @Nonnull final Class<?> type) {
         return coll.stream().allMatch(type::isInstance);
     }
