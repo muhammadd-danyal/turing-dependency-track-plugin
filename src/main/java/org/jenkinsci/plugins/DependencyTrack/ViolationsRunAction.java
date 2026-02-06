@@ -105,11 +105,7 @@ public class ViolationsRunAction implements RunAction2, SimpleBuildStep.LastBuil
         return violations != null && !violations.isEmpty();
     }
 
-    /**
-     * Returns the UI model for an ECharts line chart that shows the violations.
-     *
-     * @return the UI model as JSON
-     */
+
     @JavaScriptMethod
     public JSONArray getViolationsJson() {
         run.checkPermission(hudson.model.Item.READ);

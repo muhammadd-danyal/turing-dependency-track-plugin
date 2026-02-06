@@ -185,14 +185,7 @@ public final class ProjectProperties extends AbstractDescribableImpl<ProjectProp
     @Extension
     public static class DescriptorImpl extends Descriptor<ProjectProperties> {
 
-        /**
-         * Retrieve the projects to populate the dropdown.
-         *
-         * @param dependencyTrackUrl the base URL to Dependency-Track
-         * @param dependencyTrackApiKey the API key to use for authentication
-         * @param item used to lookup credentials in job config
-         * @return ListBoxModel
-         */
+
         @POST
         public ListBoxModel doFillParentIdItems(@RelativePath("..") @QueryParameter final String dependencyTrackUrl, @RelativePath("..") @QueryParameter final String dependencyTrackApiKey, @AncestorInPath @Nullable final Item item) {
             org.jenkinsci.plugins.DependencyTrack.DescriptorImpl pluginDescriptor = Jenkins.get().getDescriptorByType(org.jenkinsci.plugins.DependencyTrack.DescriptorImpl.class);

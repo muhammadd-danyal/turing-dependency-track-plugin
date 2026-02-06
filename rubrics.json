@@ -2,18 +2,14 @@
 	"upload_directory": "/tmp/files/",
 	"output_directory": "/tmp/outputs/",
 	"system_prompt": "You are an expert code reviewer. Analyze the provided codebase for bugs, security issues, and correctness problems. Provide actionable feedback. All files are located in /tmp/files",
-	"task_prompt": "You are an expert code reviewer. Your task is to analyze the Dependency-Track Jenkins Plugin — a Java-based CI/CD plugin that uploads CycloneDX SBOMs to a Dependency-Track server, polls for analysis completion in synchronous mode, evaluates severity-based risk gates and policy violation thresholds to pass or fail builds, manages per-job and global configuration with override resolution, looks up API key credentials from the Jenkins credential store, renders violation trend charts across build history, and constructs frontend links to Dependency-Track projects. The goal is to find 8 subtle bugs that have been planted in the core plugin source files. These bugs involve boundary condition filter errors in Optional chains that change the semantics of zero-valued timeout and interval settings, a Jenkins API method name confusion that alters which prior builds are used as comparison baselines for new-findings threshold evaluation, a missing case normalization in a stream collector causing key mismatch between collected data and hardcoded defaults in trend chart generation, a null-safety regression introduced by swapping the receiver and argument of an equals() call in credential lookup, and a field-versus-local-variable confusion where a class field is used instead of a locally resolved value when constructing a project link action. All bugs are in src/main/java/org/jenkinsci/plugins/DependencyTrack/.",
+	"task_prompt": "You are an expert code reviewer. Your task is to analyze the Dependency-Track Jenkins Plugin — a Java-based CI/CD plugin that uploads CycloneDX SBOMs to a Dependency-Track server, polls for analysis completion in synchronous mode, evaluates severity-based risk gates and policy violation thresholds to pass or fail builds, manages per-job and global configuration with override resolution, renders violation and finding trend charts across build history, and constructs frontend links to Dependency-Track projects. The goal is to find 8 subtle bugs that have been planted in the core plugin source files. These bugs involve: an off-by-one boundary comparison in a polling timeout check, a Jenkins API method name confusion that alters build history traversal for threshold baselines, boundary filter predicate changes that reject valid zero-valued timeout configurations, a missing case normalization in a stream collector causing key mismatch in trend chart data, a threshold field value swap buried in a block of 20 identical assignment lines, a Jenkins Result API method confusion that changes when builds are aborted versus merely marked, and a Duration unit confusion that converts seconds to milliseconds in HTTP client creation. All bugs are in src/main/java/org/jenkinsci/plugins/DependencyTrack/.",
 	"rubric": [
 		{
+			"criterion": "Identifies the off-by-one boundary comparison in publishAnalysisResult() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the polling timeout check was changed from timeout < System.currentTimeMillis() to timeout <= System.currentTimeMillis(), causing the build to falsely report polling timeout exceeded at the exact millisecond the timeout expires instead of allowing one final check, which intermittently aborts builds that would have completed on the last poll cycle",
+			"weight": 1
+		},
+		{
 			"criterion": "Identifies the Jenkins API method confusion in getPreviousBuildWithAnalysisResult() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where getPreviousSuccessfulBuild() was replaced with getPreviousNotFailedBuild(), causing UNSTABLE builds to be included as valid comparison baselines for new-findings threshold evaluation, which makes the security risk gate more lenient after an UNSTABLE build because the higher finding counts from that build reduce the computed delta of new findings",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingTimeout() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the Optional filter predicate was changed from filter(v -> v > 0) to filter(v -> v >= 0), allowing a job-level polling timeout of exactly 0 to pass through instead of falling back to the global default, which produces a computed timeout of 60000L * 0 = 0 milliseconds and causes immediate polling-timeout-exceeded failure in synchronous builds",
-			"weight": 1
-		},
-		{
-			"criterion": "Identifies the boundary filter relaxation in getEffectivePollingInterval() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the Optional filter predicate was changed from filter(v -> v > 0) to filter(v -> v >= 0), allowing a job-level polling interval of exactly 0 to pass through instead of falling back to the global default, which produces a sleep of 1000L * 0 = 0 milliseconds and creates a tight busy-loop of rapid HTTP polling requests that can overload the Dependency-Track server",
 			"weight": 1
 		},
 		{
@@ -29,11 +25,15 @@
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the null-safety regression in lookupApiKey() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DescriptorImpl.java where the equals() call was changed from c.getId().equals(credentialId) to credentialId.equals(c.getId()), swapping the receiver so that when credentialId is null which occurs when no API key credential is configured either globally or per-job, the call throws a NullPointerException instead of safely returning false",
+			"criterion": "Identifies the threshold field value swap in getThresholds() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the assignment thresholds.newFindings.unstableMedium was changed from unstableNewMedium to unstableNewLow, buried among 20 identical-structure assignment lines, causing the unstable threshold for new medium-severity findings to use the low-severity threshold value instead, which makes the medium gate either too strict or too lenient depending on the relative values of the two thresholds",
 			"weight": 1
 		},
 		{
-			"criterion": "Identifies the field-versus-local-variable confusion in publishAnalysisResult() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where the class field projectId is used instead of the local variable effectiveProjectId when constructing the ResultLinkAction, causing the project link to contain a null or blank project UUID in name-plus-version configuration mode because the resolved UUID from lookupProjectId() stored in effectiveProjectId is not used",
+			"criterion": "Identifies the Jenkins Result API method confusion in evaluateRiskGates() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/DependencyTrackPublisher.java where isWorseOrEqualTo(Result.UNSTABLE) was changed to isWorseThan(Result.UNSTABLE) on the abort check that throws AbortException, causing builds that evaluate to exactly UNSTABLE to have their result set but not abort the build, effectively bypassing the security gate for UNSTABLE-level threshold violations while still correctly aborting for FAILURE-level violations",
+			"weight": 1
+		},
+		{
+			"criterion": "Identifies the Duration unit confusion in newHttpClient() function in src/main/java/org/jenkinsci/plugins/DependencyTrack/PluginUtil.java where Duration.ofSeconds(connectionTimeout) was changed to Duration.ofMillis(connectionTimeout), causing the connection timeout value which is stored and configured in seconds to be interpreted as milliseconds, so a configured 30-second connection timeout becomes 30 milliseconds and causes intermittent connection timeout failures on any network with latency above a few milliseconds",
 			"weight": 1
 		}
 	]

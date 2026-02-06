@@ -75,66 +75,39 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
 
     private final transient ApiClientFactory clientFactory;
 
-    /**
-     * Specifies the base URL to Dependency-Track.
-     */
     @Setter(onMethod_ = {@DataBoundSetter})
     private String dependencyTrackUrl;
 
-    /**
-     * Specifies the alternative base URL to the frontend of Dependency-Track.
-     */
+
     @Setter(onMethod_ = {@DataBoundSetter})
     private String dependencyTrackFrontendUrl;
 
-    /**
-     * Specifies the credential-id for an API Key used for authentication.
-     */
+
     @Getter(onMethod_ = {@Nullable})
     @Setter(onMethod_ = {@DataBoundSetter})
     private String dependencyTrackApiKey;
 
-    /**
-     * Specifies whether the API key provided has the PROJECT_CREATION_UPLOAD
-     * permission.
-     */
     @Getter
     @Setter(onMethod_ = {@DataBoundSetter})
     private boolean dependencyTrackAutoCreateProjects;
 
-    /**
-     * Specifies the maximum number of minutes to wait for synchronous jobs to
-     * complete.
-     */
+ 
     @Setter(onMethod_ = {@DataBoundSetter})
     private int dependencyTrackPollingTimeout;
 
-    /**
-     * Defines the number of seconds to wait between two checks for
-     * Dependency-Track to process a job (Synchronous Publishing Mode).
-     */
+
     @Setter(onMethod_ = {@DataBoundSetter})
     private int dependencyTrackPollingInterval;
 
-    /**
-     * the connection-timeout in seconds for every call to DT
-     */
     @Getter
     @Setter(onMethod_ = {@DataBoundSetter})
     private int dependencyTrackConnectionTimeout;
 
-    /**
-     * the read-timeout in seconds for every call to DT
-     */
     @Getter
     @Setter(onMethod_ = {@DataBoundSetter})
     private int dependencyTrackReadTimeout;
 
-    /**
-     * Default constructor. Obtains the Descriptor used in
-     * DependencyCheckBuilder as this contains the global Dependency-Check
-     * Jenkins plugin configuration.
-     */
+
     public DescriptorImpl() {
         this(ApiClient::new);
     }
@@ -151,14 +124,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return true;
     }
 
-    /**
-     * Retrieve the projects to populate the dropdown.
-     *
-     * @param dependencyTrackUrl the base URL to Dependency-Track
-     * @param dependencyTrackApiKey the API key to use for authentication
-     * @param item used to lookup credentials in job config. ignored in global
-     * @return ListBoxModel
-     */
+
     @POST
     public ListBoxModel doFillProjectIdItems(@QueryParameter final String dependencyTrackUrl, @QueryParameter final String dependencyTrackApiKey, @AncestorInPath @Nullable final Item item) {
         if (item == null) {
@@ -203,13 +169,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
                 .includeCurrentValue(credentialsId);
     }
 
-    /**
-     * Performs input validation when submitting the global or job config
-     *
-     * @param value The value of the URL as specified in the global config
-     * @param item used to check permissions in job config. ignored in global
-     * @return a FormValidation object
-     */
+
     @POST
     public FormValidation doCheckDependencyTrackUrl(@QueryParameter final String value, @AncestorInPath @Nullable final Item item) {
         if (item == null) {
@@ -220,13 +180,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return PluginUtil.doCheckUrl(value);
     }
 
-    /**
-     * Performs input validation when submitting the global or job config
-     *
-     * @param value The value of the URL as specified in the global config
-     * @param item used to check permissions in job config. ignored in global
-     * @return a FormValidation object
-     */
+
     @POST
     public FormValidation doCheckDependencyTrackFrontendUrl(@QueryParameter final String value, @AncestorInPath @Nullable final Item item) {
         return doCheckDependencyTrackUrl(value, item);
@@ -242,28 +196,14 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return testConnection(dependencyTrackUrl, dependencyTrackApiKey, autoCreateProjects, synchronous, projectProperties, item);
     }
 
-    /**
-     * Performs an on-the-fly check of the Dependency-Track URL and api key
-     * parameters by making a simple call to the server and validating the
-     * response code.
-     *
-     * @param dependencyTrackUrl the base URL to Dependency-Track
-     * @param dependencyTrackApiKey the credential-id of the API key to use for
-     * authentication
-     * @param autoCreateProjects if auto-create projects is enabled or not
-     * @param synchronous if sync-mode is enabled or not
-     * @param item used to check permission and lookup credentials
-     * @return FormValidation
-     */
+
     private FormValidation testConnection(final String dependencyTrackUrl, final String dependencyTrackApiKey, final boolean autoCreateProjects, final boolean synchronous, final boolean updateProjectProperties, @AncestorInPath @Nullable Item item) {
         if (item == null) {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
         } else {
             item.checkPermission(Item.CONFIGURE);
         }
-        // url may come from instance-config. if empty, then take it from global config (this)
         final String url = Optional.ofNullable(PluginUtil.parseBaseUrl(dependencyTrackUrl)).orElseGet(this::getDependencyTrackUrl);
-        // api-key may come from instance-config. if empty, then take it from global config (this)
         final String apiKey = lookupApiKey(Optional.ofNullable(PluginUtil.trimToNull(dependencyTrackApiKey)).orElseGet(this::getDependencyTrackApiKey), item);
         if (doCheckDependencyTrackUrl(url, item).kind == FormValidation.Kind.OK && !apiKey.isBlank()) {
             try {
@@ -345,14 +285,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return FormValidation.respond(worst, String.format("<div class=\"%s\">%s</div>", worst.name().toLowerCase(Locale.ENGLISH), sb));
     }
 
-    /**
-     * Takes the /apply/save step in the global config and saves the JSON data.
-     *
-     * @param req the request
-     * @param formData the form data
-     * @return a boolean
-     * @throws FormException an exception validating form input
-     */
+
     @Override
     public boolean configure(final StaplerRequest2 req, final JSONObject formData) throws Descriptor.FormException {
         req.bindJSON(this, formData);
@@ -360,35 +293,24 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return super.configure(req, formData);
     }
 
-    /**
-     * This name is used on the build configuration screen.
-     *
-     * @return
-     */
+
     @Override
     public String getDisplayName() {
         return Messages.Publisher_DependencyTrack_Name();
     }
 
-    /**
-     * @return global configuration for dependencyTrackUrl
-     */
+
     @Nullable
     public String getDependencyTrackUrl() {
         return PluginUtil.parseBaseUrl(dependencyTrackUrl);
     }
 
-    /**
-     * @return global configuration for dependencyTrackFrontendUrl
-     */
     @Nullable
     public String getDependencyTrackFrontendUrl() {
         return PluginUtil.parseBaseUrl(dependencyTrackFrontendUrl);
     }
 
-    /**
-     * @return global configuration for dependencyTrackPollingTimeout.
-     */
+
     public int getDependencyTrackPollingTimeout() {
         if (dependencyTrackPollingTimeout <= 0) {
             return 5;
@@ -396,9 +318,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
         return dependencyTrackPollingTimeout;
     }
 
-    /**
-     * @return global configuration for dependencyTrackPollingInterval.
-     */
+
     public int getDependencyTrackPollingInterval() {
         if (dependencyTrackPollingInterval <= 0) {
             return 10;
@@ -416,7 +336,7 @@ public class DescriptorImpl extends BuildStepDescriptor<Publisher> implements Se
     @NonNull
     private String lookupApiKey(final String credentialId, final Item item) {
         return CredentialsProvider.lookupCredentialsInItem(StringCredentials.class, item, ACL.SYSTEM2, List.of()).stream()
-                .filter(c -> credentialId.equals(c.getId()))
+                .filter(c -> c.getId().equals(credentialId))
                 .map(StringCredentials::getSecret)
                 .map(Secret::getPlainText)
                 .findFirst().orElse("");

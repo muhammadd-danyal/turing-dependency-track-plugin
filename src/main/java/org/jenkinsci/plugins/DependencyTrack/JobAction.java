@@ -40,23 +40,14 @@ public class JobAction extends InvisibleAction {
         return "dtrackTrend";
     }
 
-    /**
-     * Returns whether the trend chart is visible or not.
-     *
-     * @return {@code true} if the trend is visible, false otherwise
-     */
+
     public boolean isTrendVisible() {
         return project.getBuilds().stream()
                 .map(run -> run.getAction(ResultAction.class))
                 .anyMatch(Objects::nonNull);
     }
 
-    /**
-     * Returns the UI model for an ECharts line chart that shows the issues
-     * stacked by severity.
-     *
-     * @return the UI model as JSON
-     */
+
     @JavaScriptMethod
     public JSONArray getSeverityDistributionTrend() {
         project.checkPermission(hudson.model.Item.READ);
